@@ -7,6 +7,15 @@ import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 
 const QUEUE_LABELS = { to_be_ordered: 'To be ordered', ordered: 'Ordered', done: 'Done' };
 
+// Per-type hint for the rule value input in the rules panel.
+const RULE_VALUE_HINTS = {
+  domain: 'e.g. example.com',
+  urlPattern: 'glob with * and ?, e.g. *github.com/*/pulls',
+  ytChannel: 'channel handle, e.g. @veritasium',
+  ytChannelId: 'channel id, e.g. UCsXVk37bltHxD1rDPwtNM8Q (case-sensitive)',
+  ytChannelName: 'exact channel name, e.g. Veritasium',
+};
+
 const els = {
   search: document.getElementById('global-search'),
   toggleRules: document.getElementById('toggle-rules'),
@@ -19,6 +28,7 @@ const els = {
   ruleTopic: document.getElementById('rule-topic'),
   ruleAdd: document.getElementById('rule-add'),
   closeAfterSetting: document.getElementById('close-after-setting'),
+  ytApiKey: document.getElementById('yt-api-key'),
   exportBtn: document.getElementById('export-btn'),
   importFile: document.getElementById('import-file'),
   shortcutsLink: document.getElementById('shortcuts-link'),
@@ -51,6 +61,18 @@ function hostOf(url) {
 
 function fmtDate(ts) {
   return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// Entry subtitle: channel/publish info for enriched YouTube videos.
+function entrySubtitle(entry) {
+  const bits = [hostOf(entry.url)];
+  if (entry.yt && entry.yt.channelName) bits.push(entry.yt.channelName);
+  if (entry.yt && entry.yt.publishedAt) {
+    const d = new Date(entry.yt.publishedAt);
+    if (!Number.isNaN(d.getTime())) bits.push(`published ${fmtDate(d.getTime())}`);
+  }
+  bits.push(`saved ${fmtDate(entry.dateAdded)}`);
+  return bits.join(' · ');
 }
 
 async function persistAndRender() {
@@ -251,7 +273,7 @@ function buildEntryRow(entry, queue) {
   a.title = entry.title; // full title on hover (truncated by CSS)
   const s = document.createElement('div');
   s.className = 's';
-  s.textContent = `${hostOf(entry.url)} · saved ${fmtDate(entry.dateAdded)}`;
+  s.textContent = entrySubtitle(entry);
   body.append(a, s);
   if (entry.note) {
     const np = document.createElement('div');
@@ -510,6 +532,8 @@ function renderRulesPanel() {
     const valueInput = document.createElement('input');
     valueInput.type = 'text';
     valueInput.value = rule.value;
+    valueInput.placeholder = RULE_VALUE_HINTS[rule.type] || '';
+    valueInput.title = RULE_VALUE_HINTS[rule.type] || '';
     valueInput.addEventListener('change', async () => {
       logic.updateRule(state, rule.id, { value: valueInput.value });
       await persistAndRender();
@@ -562,6 +586,11 @@ function renderRulesPanel() {
 
 function renderSettingsPanel() {
   els.closeAfterSetting.checked = !!state.settings.closeAfterAdd;
+  // Only reflect into the field when it isn't focused, so a render triggered
+  // by another action never clobbers a key being typed.
+  if (document.activeElement !== els.ytApiKey) {
+    els.ytApiKey.value = state.settings.ytApiKey || '';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -654,8 +683,19 @@ async function init() {
     await persistAndRender();
   });
 
+  const ruleValueHint = RULE_VALUE_HINTS[els.ruleType.value] || '';
+  els.ruleValue.placeholder = ruleValueHint;
+  els.ruleType.addEventListener('change', () => {
+    els.ruleValue.placeholder = RULE_VALUE_HINTS[els.ruleType.value] || '';
+  });
+
   els.closeAfterSetting.addEventListener('change', async () => {
     state.settings.closeAfterAdd = els.closeAfterSetting.checked;
+    await saveState(chromeAdapter(), state);
+  });
+
+  els.ytApiKey.addEventListener('change', async () => {
+    state.settings.ytApiKey = els.ytApiKey.value.trim();
     await saveState(chromeAdapter(), state);
   });
 

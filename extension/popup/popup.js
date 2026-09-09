@@ -1,4 +1,5 @@
 import * as logic from '../shared/logic.js';
+import { ensureYtMeta } from '../shared/youtube.js';
 import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 
 const els = {
@@ -24,6 +25,7 @@ const els = {
 let state = null;
 let currentTab = null;
 let filedTabIds = [];
+let userPickedTopicId = null; // topic the user chose manually; beats suggestions
 
 function faviconFor(url) {
   return `${chrome.runtime.getURL('/_favicon/')}?pageUrl=${encodeURIComponent(url)}&size=32`;
@@ -33,11 +35,22 @@ function hostOf(url) {
   try { return new URL(url).host; } catch { return url; }
 }
 
-function populateTopicSelect(select, targetTopicId) {
+// Entry subtitle: channel name and publish date for enriched YouTube videos.
+function entrySubtitle(entry) {
+  const bits = [];
+  if (entry.yt && entry.yt.channelName) bits.push(entry.yt.channelName);
+  if (entry.yt && entry.yt.publishedAt) {
+    const d = new Date(entry.yt.publishedAt);
+    if (!Number.isNaN(d.getTime())) bits.push(`published ${d.toLocaleDateString()}`);
+  }
+  return bits.length ? `${hostOf(entry.url)} · ${bits.join(' · ')}` : hostOf(entry.url);
+}
+
+function populateTopicSelect(select, targetTopicId = null) {
   select.replaceChildren();
   const suggestion = currentTab ? logic.matchUrl(state, currentTab.url) : null;
   const noTopic = logic.findTopicByName(state, 'NoTopic') || state.topics[0];
-  const targetId = targetTopicId || (suggestion ? suggestion.topicId : noTopic?.id);
+  const targetId = targetTopicId || userPickedTopicId || (suggestion ? suggestion.topicId : noTopic?.id);
   for (const topic of state.topics) {
     const opt = document.createElement('option');
     opt.value = topic.id;
@@ -71,7 +84,7 @@ function entryRow(entry, topicName) {
   t.textContent = entry.title;
   const s = document.createElement('div');
   s.className = 's';
-  s.textContent = topicName ? `${topicName} · ${hostOf(entry.url)}` : hostOf(entry.url);
+  s.textContent = topicName ? `${topicName} · ${entrySubtitle(entry)}` : entrySubtitle(entry);
   body.append(t, s);
 
   row.append(img, body);
@@ -125,8 +138,15 @@ async function refreshCurrentTabCard() {
   currentTab = tab;
   els.curTitle.textContent = tab.title || tab.url || 'Untitled tab';
   els.curTitle.title = tab.url || '';
-  const suggestion = logic.matchUrl(state, tab.url);
-  populateTopicSelect(els.topicSelect, suggestion ? suggestion.topicId : null);
+  populateTopicSelect(els.topicSelect);
+
+  // Enrichment is async: the URL-based suggestion above renders instantly and
+  // the match re-runs once video metadata arrives (channel rules only see the
+  // Data API response). A manual user selection always wins.
+  const meta = await ensureYtMeta(state, tab.url);
+  if (!meta) return;
+  await saveState(chromeAdapter(), state); // persist the cache fill
+  if (currentTab.url === tab.url) populateTopicSelect(els.topicSelect);
 }
 
 async function afterStateChange() {
@@ -145,10 +165,15 @@ async function init() {
     await saveState(chromeAdapter(), state);
   });
 
+  els.topicSelect.addEventListener('change', () => {
+    userPickedTopicId = els.topicSelect.value;
+  });
+
   els.addBtn.addEventListener('click', async () => {
     if (!currentTab || !els.topicSelect.value) return;
     const suggestion = logic.matchUrl(state, currentTab.url);
-    const { moved } = logic.saveTab(state, currentTab, els.topicSelect.value, suggestion ? suggestion.id : null);
+    const meta = await ensureYtMeta(state, currentTab.url);
+    const { moved } = logic.saveTab(state, currentTab, els.topicSelect.value, suggestion ? suggestion.id : null, meta);
     els.saveStatus.textContent = moved ? 'Moved to new topic (note kept)' : 'Saved ✓';
     await afterStateChange();
     if (els.closeAfter.checked) {
@@ -185,6 +210,22 @@ async function init() {
       filedTabIds.push(tabId);
     }
     await afterStateChange();
+    // Enrich filed YouTube videos after the fact: one fetch each (cache
+    // misses only), then stamp the entries and persist once.
+    const filedUrls = filedTabIds
+      .map((id) => orderedRows.find((r) => Number(r.dataset.tabId) === id))
+      .filter(Boolean)
+      .map((r) => r.dataset.url);
+    let enriched = false;
+    await Promise.allSettled(
+      filedUrls.map(async (url) => {
+        if (await ensureYtMeta(state, url)) enriched = true;
+      })
+    );
+    if (enriched) {
+      logic.backfillYtStamps(state);
+      await saveState(chromeAdapter(), state);
+    }
     if (filedTabIds.length && els.bulkCloseAfter.checked) {
       try { await chrome.tabs.remove(filedTabIds); } catch { /* some may be gone */ }
       filedTabIds = [];

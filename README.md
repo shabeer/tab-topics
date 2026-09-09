@@ -34,10 +34,19 @@ and JSON export/import. Built to the revised specification in
   - Rules tab (try domain rule example.com → News, then reload example.com and see the "suggested" badge in the picker) 
   - Settings → Export
 
-- **Rule-based topic suggestions** — domain, URL-pattern (`*` wildcards), and
-  YouTube-channel rules pre-select a topic in the quick picker and bulk filing.
-  If no rules match, **NoTopic** is pre-selected. In the save tab popup,
-  simply pressing Enter saves to the pre-selected topic (manual approval).
+- **Rule-based topic suggestions** — domain, URL-pattern (`*` wildcards),
+  YouTube-channel-handle, YouTube-channel-id, and YouTube-channel-name rules
+  pre-select a topic in the quick picker and bulk filing. If no rules match,
+  **NoTopic** is pre-selected. In the save tab popup, simply pressing Enter
+  saves to the pre-selected topic (manual approval).
+- **YouTube video enrichment** — for `/watch?v=…`, `youtu.be/…`, `/shorts/…`,
+  `/live/…`, and `/embed/…` links, the extension fetches the video's publish
+  date, channel name, and channel id once (YouTube Data API v3, cached per
+  video) and stamps them on the entry. Channel-id and channel-name rules can
+  then classify watch URLs, recents/manager show the channel and publish date,
+  and search covers the channel name. Requires a free Data API key pasted into
+  the manager's Settings (stays on this machine; never exported). Without a
+  key, everything works exactly as before on URL rules alone.
 - **Bulk filing** — "File all tabs in this window" in the popup: one topic
   select per tab (rules pre-select matching topics; unmatched tabs default to
   **NoTopic**). Tabs marked "— skip —" are excluded entirely — no entry, no close.
@@ -85,9 +94,11 @@ Reload the extension in `chrome://extensions` after editing files.
 
 ```
 extension/
-  manifest.json               MV3 manifest (permissions: tabs, storage, favicon)
+  manifest.json               MV3 manifest (permissions: tabs, storage, favicon;
+                              host permissions: googleapis.com for YouTube enrichment)
   background/service-worker.js  opens quick-capture windows on shortcuts
   shared/logic.js             pure data logic (queues, rules, search, import)
+  shared/youtube.js           YouTube Data API fetch + metadata cache orchestration
   shared/store.js             chrome.storage.local persistence (+ memory adapter for tests)
   popup/                      toolbar popup: quick save, bulk filing, search, recents
   quick/                      shortcut windows: topic picker, note editor
@@ -117,6 +128,24 @@ hand. The spec-side view of the same information lives in
   asset exists, all JS files parse as ES modules, every HTML-referenced local
   asset resolves, shared modules import cleanly and behave.
 - Icons are generated dependency-free by `npm run icons`.
+
+### v2 session — YouTube enrichment
+
+- **47/47 unit tests pass** (`npm test`): the 28 v1 tests plus 19 covering
+  video-URL shape parsing (`/watch`, `youtu.be`, `/shorts`, `/live`,
+  `/embed`, music/m hosts), `ytChannelId`/`ytChannelName` rule semantics and
+  validation, handle rules matching through fetched metadata, `ensureYtMeta`
+  caching/tombstone/error behavior (injected fetch, no network),
+  entry stamping + bulk backfill, export/import key hygiene, the `loadState`
+  migration for pre-v2 states, and channel-name search.
+- **`npm run build` validates** with the new `shared/youtube.js` module and
+  the `host_permissions` entry.
+- To verify by hand: reload the extension (Chrome will show the new
+  "read and change your data on www.googleapis.com" permission), save a
+  `youtu.be/…` link without a key (v1 behavior, no enrichment), then paste a
+  Data API key in the manager's Settings and save the link again — the entry
+  subtitle shows the channel and publish date, and a `ytChannelName` rule for
+  that channel pre-selects its topic on the next save.
 
 ### Verified live in Chrome (v152, macOS)
 
@@ -178,13 +207,16 @@ an extension defect. The chords are the one item to confirm by hand:
   restarting the helper (quit and reopen ZCode) clears it. Restarting Chrome
   alone does not.
 
-## Known limitations (v1 scope)
+## Known limitations
 
-- **Metadata is minimal**: entries store title, URL, and date-added. Publish
-  date, YouTube channel name, and other enrichment are deferred to v2.
-- **YouTube-channel rules match only URLs that contain the handle**
-  (e.g. `youtube.com/@handle/videos`). Watch URLs (`/watch?v=…`) carry no
-  channel in the URL itself; accurate matching needs the v2 metadata work.
+- **YouTube enrichment needs a user-provided API key** (Settings). Without
+  it — or when the key is invalid/quota-exceeded — watch URLs are classified
+  by URL rules only and entries carry no channel/publish-date stamp; failures
+  surface as console warnings.
+- **Channel-id/name rules don't fire on channel pages** —
+  `youtube.com/@handle/…` URLs are still matched by handle rules only,
+  because resolving a handle to its `UC…` id needs a second API call that
+  isn't built.
 - **One topic per URL** — saving an already-saved URL moves it (note kept,
   queue reset to `to_be_ordered`).
 - **Deleting a topic requires moving its entries** to another topic first;

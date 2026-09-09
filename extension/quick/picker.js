@@ -4,6 +4,7 @@
 // to_be_ordered queue.
 
 import * as logic from '../shared/logic.js';
+import { ensureYtMeta } from '../shared/youtube.js';
 import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
@@ -20,6 +21,7 @@ let state = null;
 let suggestion = null;
 let visible = [];
 let selected = 0;
+let touched = false; // user has navigated/filtered — don't move their selection
 
 function getTargetTopicId() {
   if (suggestion && state.topics.some((t) => t.id === suggestion.topicId)) {
@@ -39,6 +41,23 @@ async function init() {
   state = await loadState(chromeAdapter());
   suggestion = logic.matchUrl(state, tab.url);
   els.title.textContent = tab.title || tab.url || 'Untitled tab';
+
+  // Enrichment is async: the URL-based suggestion is live immediately, and if
+  // video metadata arrives (and changes the match) the list re-renders. When
+  // the user hasn't interacted yet, the selection follows the new suggestion.
+  ensureYtMeta(state, tab.url).then(async (meta) => {
+    if (!meta) return;
+    const better = logic.matchUrl(state, tab.url);
+    if (better && better.id !== (suggestion && suggestion.id)) {
+      suggestion = better;
+      if (!touched) {
+        const idx = visible.findIndex((t) => t.id === getTargetTopicId());
+        if (idx >= 0) selected = idx;
+      }
+    }
+    await saveState(chromeAdapter(), state); // persist the cache fill
+    render();
+  });
   try {
     els.host.textContent = new URL(tab.url).host;
   } catch {
@@ -59,6 +78,7 @@ async function init() {
   render();
 
   els.filter.addEventListener('input', () => {
+    touched = true;
     const q = els.filter.value.trim().toLowerCase();
     const newVisible = state.topics.filter((t) => t.name.toLowerCase().includes(q));
     const targetId = getTargetTopicId();
@@ -72,15 +92,18 @@ async function init() {
       window.close();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
+      touched = true;
       move(1);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      touched = true;
       move(-1);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       confirmSelected();
     } else if (/^[1-9]$/.test(e.key) && els.filter.value === '' && document.activeElement !== els.filter) {
       e.preventDefault();
+      touched = true;
       const topic = visible[Number(e.key) - 1];
       if (topic) confirm(topic.id);
     }
@@ -88,7 +111,10 @@ async function init() {
 
   els.list.addEventListener('click', (e) => {
     const li = e.target.closest('li[data-topic-id]');
-    if (li) confirm(li.dataset.topicId);
+    if (li) {
+      touched = true;
+      confirm(li.dataset.topicId);
+    }
   });
 }
 
@@ -145,7 +171,8 @@ function confirmSelected() {
 }
 
 async function confirm(topicId) {
-  logic.saveTab(state, tab, topicId, suggestion ? suggestion.id : null);
+  const meta = await ensureYtMeta(state, tab.url);
+  logic.saveTab(state, tab, topicId, suggestion ? suggestion.id : null, meta);
   await saveState(chromeAdapter(), state);
   if (els.closeAfter.checked) {
     try { await chrome.tabs.remove(tabId); } catch { /* already gone */ }

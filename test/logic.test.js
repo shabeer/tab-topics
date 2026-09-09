@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as logic from '../extension/shared/logic.js';
+import * as yt from '../extension/shared/youtube.js';
 import { memoryAdapter, loadState, saveState } from '../extension/shared/store.js';
 
 function fresh() {
@@ -30,7 +31,9 @@ test('newState seeds NoTopic and General topics and empty collections', () => {
   assert.deepEqual(s.topics.map((t) => t.name), ['NoTopic', 'General']);
   assert.deepEqual(s.entries, []);
   assert.deepEqual(s.rules, []);
+  assert.deepEqual(s.ytMeta, {});
   assert.equal(s.settings.closeAfterAdd, false);
+  assert.equal(s.settings.ytApiKey, '');
 });
 
 test('ensureTopic find-or-creates the NoTopic catch-all case-insensitively', () => {
@@ -408,4 +411,264 @@ test('loadState rejects unknown schema versions by reinitializing', async () => 
   const s = await loadState(adapter);
   assert.equal(s.schemaVersion, 1);
   assert.equal(s.topics.length, 2);
+});
+
+// --- YouTube video URL parsing ----------------------------------------------
+
+const WATCH = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+const UC_A = 'UC' + 'a'.repeat(22);
+const UC_B = 'UC' + 'b'.repeat(22);
+
+test('youtubeVideoIdOf parses all video URL shapes', () => {
+  const f = logic.youtubeVideoIdOf;
+  assert.equal(f('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(f('https://youtube.com/watch?t=42&v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ'); // v not first
+  assert.equal(f('https://m.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(f('https://music.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(f('https://youtu.be/dQw4w9WgXcQ?t=30'), 'dQw4w9WgXcQ');
+  assert.equal(f('https://www.youtube.com/shorts/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(f('https://www.youtube.com/live/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(f('https://www.youtube.com/embed/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+});
+
+test('youtubeVideoIdOf rejects non-video and malformed URLs', () => {
+  const f = logic.youtubeVideoIdOf;
+  assert.equal(f('https://www.youtube.com/@handle/videos'), null);
+  assert.equal(f('https://www.youtube.com/channel/' + UC_A), null);
+  assert.equal(f('https://www.youtube.com/watch'), null);
+  assert.equal(f('https://www.youtube.com/watch?v=short'), null);
+  assert.equal(f('https://notyoutube.com/watch?v=dQw4w9WgXcQ'), null);
+  assert.equal(f('not a url'), null);
+});
+
+// --- channel-id / channel-name rules -----------------------------------------
+
+test('ytChannelId rule matches enriched watch URLs exactly', () => {
+  const s = fresh();
+  const rule = logic.addRule(s, { type: 'ytChannelId', value: UC_A, topicId: s.topics[0].id });
+  assert.ok(rule, 'valid UC id accepted');
+  assert.equal(logic.ruleMatches(rule, WATCH, { channelId: UC_A }), true);
+  assert.equal(logic.ruleMatches(rule, WATCH, { channelId: UC_B }), false);
+  assert.equal(logic.ruleMatches(rule, WATCH), false); // no metadata yet
+  assert.equal(logic.ruleMatches(rule, 'https://www.youtube.com/@whatever'), false);
+});
+
+test('ytChannelId rules reject malformed ids at add and update time', () => {
+  const s = fresh();
+  assert.equal(logic.addRule(s, { type: 'ytChannelId', value: 'not-a-valid-id', topicId: s.topics[0].id }), null);
+  assert.equal(logic.addRule(s, { type: 'ytChannelId', value: 'UC123', topicId: s.topics[0].id }), null);
+  const rule = logic.addRule(s, { type: 'ytChannelId', value: UC_A, topicId: s.topics[0].id });
+  assert.equal(logic.updateRule(s, rule.id, { value: 'bad' }), false);
+  assert.equal(rule.value, UC_A); // rejected patch left the value untouched
+});
+
+test('ytChannelName rule matches the channel title case-insensitively, exact only', () => {
+  const s = fresh();
+  const rule = logic.addRule(s, { type: 'ytChannelName', value: 'Veritasium', topicId: s.topics[0].id });
+  assert.ok(rule);
+  assert.equal(logic.ruleMatches(rule, WATCH, { channelName: 'veritasium' }), true);
+  assert.equal(logic.ruleMatches(rule, WATCH, { channelName: 'Veritasium' }), true);
+  assert.equal(logic.ruleMatches(rule, WATCH, { channelName: 'Veritasium 2' }), false); // no substring
+  assert.equal(logic.ruleMatches(rule, WATCH), false);
+});
+
+test('ytChannel handle rules also match watch URLs through fetched metadata', () => {
+  const s = fresh();
+  const rule = logic.addRule(s, { type: 'ytChannel', value: '@Veritasium', topicId: s.topics[0].id });
+  assert.equal(logic.ruleMatches(rule, WATCH, { handle: 'veritasium' }), true);
+  assert.equal(logic.ruleMatches(rule, WATCH, { handle: 'someoneelse' }), false);
+});
+
+test('matchUrl matches channel rules for watch URLs once metadata is cached', () => {
+  const s = fresh();
+  const tech = addTopic(s, 'Tech');
+  const rule = logic.addRule(s, { type: 'ytChannelName', value: 'Test Channel', topicId: tech.id });
+  assert.equal(logic.matchUrl(s, WATCH), null); // nothing fetched yet
+
+  s.ytMeta['dQw4w9WgXcQ'] = logic.normalizeYtMeta({
+    channelId: UC_A,
+    channelName: 'Test Channel',
+    handle: '@testchannel',
+    publishedAt: '2020-01-02T03:04:05Z',
+    fetchedAt: 1,
+  });
+  assert.equal(logic.matchUrl(s, WATCH).id, rule.id);
+  assert.equal(logic.ytMetaFor(s, 'https://youtu.be/dQw4w9WgXcQ').channelName, 'Test Channel');
+});
+
+// --- metadata fetching (shared/youtube.js) ------------------------------------
+
+const okResponse = (items) => ({ ok: true, status: 200, json: async () => ({ items }) });
+const errResponse = (status) => ({ ok: false, status, json: async () => ({}) });
+
+function apiItem(overrides = {}) {
+  return {
+    id: 'dQw4w9WgXcQ',
+    snippet: {
+      channelId: UC_A,
+      channelTitle: 'Test Channel',
+      customUrl: '@TestChannel',
+      publishedAt: '2020-01-02T03:04:05Z',
+      ...overrides,
+    },
+  };
+}
+
+function fetchCounter(handler) {
+  const counter = { calls: 0 };
+  counter.impl = async (url) => {
+    counter.calls++;
+    return handler(url, counter.calls);
+  };
+  return counter;
+}
+
+test('ensureYtMeta fetches once per video id, caches, and normalizes fields', async () => {
+  const s = fresh();
+  s.settings.ytApiKey = 'TESTKEY';
+  const counter = fetchCounter(() => okResponse([apiItem()]));
+
+  const meta1 = await yt.ensureYtMeta(s, WATCH, { fetchImpl: counter.impl });
+  assert.equal(counter.calls, 1);
+  assert.equal(meta1.videoId, 'dQw4w9WgXcQ');
+  assert.equal(meta1.channelId, UC_A);
+  assert.equal(meta1.channelName, 'Test Channel');
+  assert.equal(meta1.handle, 'testchannel'); // customUrl normalized to bare handle
+  assert.equal(meta1.publishedAt, '2020-01-02T03:04:05Z');
+  assert.ok(meta1.fetchedAt > 0);
+
+  // Same video via a different URL shape: served from the cache.
+  const meta2 = await yt.ensureYtMeta(s, 'https://youtu.be/dQw4w9WgXcQ', { fetchImpl: counter.impl });
+  assert.equal(counter.calls, 1);
+  assert.deepEqual(meta2, meta1);
+});
+
+test('ensureYtMeta is a no-op without a key or for non-video URLs', async () => {
+  const s = fresh(); // no key configured
+  const counter = fetchCounter(() => okResponse([apiItem()]));
+  assert.equal(await yt.ensureYtMeta(s, WATCH, { fetchImpl: counter.impl }), null);
+
+  s.settings.ytApiKey = 'TESTKEY';
+  assert.equal(await yt.ensureYtMeta(s, 'https://www.youtube.com/@handle/videos', { fetchImpl: counter.impl }), null);
+  assert.equal(await yt.ensureYtMeta(s, 'https://example.com/x', { fetchImpl: counter.impl }), null);
+  assert.equal(counter.calls, 0);
+});
+
+test('ensureYtMeta returns null on API errors and caches nothing', async () => {
+  const s = fresh();
+  s.settings.ytApiKey = 'TESTKEY';
+  const counter = fetchCounter(() => errResponse(403));
+  assert.equal(await yt.ensureYtMeta(s, WATCH, { fetchImpl: counter.impl }), null);
+  assert.equal(counter.calls, 1);
+  assert.deepEqual(s.ytMeta, {}); // failure is not cached — next save retries
+});
+
+test('ensureYtMeta tombstones unavailable videos to avoid refetch loops', async () => {
+  const s = fresh();
+  s.settings.ytApiKey = 'TESTKEY';
+  const counter = fetchCounter(() => okResponse([])); // private/deleted video
+
+  assert.equal(await yt.ensureYtMeta(s, WATCH, { fetchImpl: counter.impl }), null);
+  assert.equal(await yt.ensureYtMeta(s, WATCH, { fetchImpl: counter.impl }), null);
+  assert.equal(counter.calls, 1);
+  assert.equal(s.ytMeta['dQw4w9WgXcQ'].unavailable, true);
+  assert.equal(logic.ytMetaFor(s, WATCH), null); // tombstone reads as no metadata
+});
+
+test('pruneYtMeta caps the cache, dropping the stalest records', () => {
+  const s = fresh();
+  for (let i = 0; i < 5; i++) s.ytMeta['vid' + i] = { channelName: 'c' + i, fetchedAt: i };
+  logic.pruneYtMeta(s, 3);
+  assert.deepEqual(Object.keys(s.ytMeta).sort(), ['vid2', 'vid3', 'vid4']);
+});
+
+// --- entry stamping ------------------------------------------------------------
+
+test('saveTab stamps entry.yt from the cache or explicit meta', () => {
+  const s = fresh();
+  s.ytMeta['dQw4w9WgXcQ'] = logic.normalizeYtMeta({ channelName: 'Chan', fetchedAt: 1 });
+
+  const e = save(s, WATCH, s.topics[0].id);
+  assert.equal(e.yt.channelName, 'Chan'); // auto-stamped from the warm cache
+
+  // Explicit meta wins (fresh fetch beats stale cache).
+  logic.saveTab(s, { url: WATCH }, s.topics[0].id, null, { channelName: 'New' });
+  assert.equal(logic.findEntryByUrl(s, WATCH).yt.channelName, 'New');
+
+  const plain = save(s, 'https://example.com/x', s.topics[0].id);
+  assert.equal(plain.yt, undefined); // non-YouTube saves get no stamp
+});
+
+test('backfillYtStamps stamps entries enriched after save (bulk path)', () => {
+  const s = fresh();
+  const e = save(s, WATCH, s.topics[0].id);
+  assert.equal(e.yt, undefined);
+  s.ytMeta['dQw4w9WgXcQ'] = logic.normalizeYtMeta({ channelName: 'Chan', fetchedAt: 1 });
+  logic.backfillYtStamps(s);
+  assert.equal(e.yt.channelName, 'Chan');
+});
+
+// --- export / import with YouTube data ------------------------------------------
+
+test('exportState strips the API key and cache but keeps entry stamps', () => {
+  const s = fresh();
+  s.settings.ytApiKey = 'SECRET';
+  s.ytMeta['dQw4w9WgXcQ'] = logic.normalizeYtMeta({ channelName: 'Chan', fetchedAt: 1 });
+  const e = save(s, WATCH, s.topics[0].id);
+  assert.ok(e.yt);
+
+  const out = logic.exportState(s);
+  assert.equal(out.settings.ytApiKey, undefined);
+  assert.equal(out.ytMeta, undefined);
+  assert.equal(out.settings.closeAfterAdd, false);
+  assert.equal(out.entries[0].yt.channelName, 'Chan');
+});
+
+test('importState carries entry stamps and never imports an API key', () => {
+  const local = fresh();
+  local.settings.ytApiKey = 'LOCALKEY';
+  const incoming = {
+    schemaVersion: 1,
+    topics: [{ id: 't1', name: 'General', createdAt: 1 }],
+    entries: [
+      {
+        id: 'e1',
+        url: WATCH,
+        title: 'v',
+        dateAdded: 1,
+        topicId: 't1',
+        queue: 'to_be_ordered',
+        position: 0,
+        note: '',
+        yt: { channelId: UC_A, channelName: 'Chan', handle: 'chan', publishedAt: '2020-01-02T03:04:05Z' },
+      },
+    ],
+    rules: [],
+    settings: { closeAfterAdd: true, ytApiKey: 'IMPORTEDKEY' },
+  };
+  logic.importState(local, incoming);
+  assert.equal(local.settings.ytApiKey, 'LOCALKEY'); // local key kept
+  assert.equal(logic.findEntryByUrl(local, WATCH).yt.channelName, 'Chan');
+});
+
+test('loadState adds the ytMeta cache and key slot to pre-enrichment states', async () => {
+  const s = fresh();
+  delete s.ytMeta;
+  delete s.settings.ytApiKey;
+  const adapter = memoryAdapter(s);
+  const loaded = await loadState(adapter);
+  assert.deepEqual(loaded.ytMeta, {});
+  assert.equal(loaded.settings.ytApiKey, '');
+  assert.equal(loaded.settings.closeAfterAdd, false); // untouched
+  const reloaded = await loadState(adapter); // persisted — stable across loads
+  assert.deepEqual(reloaded.ytMeta, {});
+  assert.equal(reloaded.settings.ytApiKey, '');
+});
+
+test('search also covers the YouTube channel name', () => {
+  const s = fresh();
+  const e = save(s, WATCH, s.topics[0].id, 'Some video title');
+  e.yt = { channelName: 'Veritasium', publishedAt: '2020-01-02T03:04:05Z' };
+  assert.deepEqual(logic.searchEntries(s, 'veritasium').map((r) => r.entry.url), [WATCH]);
+  assert.deepEqual(logic.searchEntries(s, 'published'), []);
 });

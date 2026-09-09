@@ -3,7 +3,7 @@
 // suite (see docs/requirements-review.md for the spec it implements).
 
 export const QUEUES = ['to_be_ordered', 'ordered', 'done'];
-export const RULE_TYPES = ['domain', 'urlPattern', 'ytChannel'];
+export const RULE_TYPES = ['domain', 'urlPattern', 'ytChannel', 'ytChannelId', 'ytChannelName'];
 
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -18,7 +18,11 @@ export function newState() {
     ],
     entries: [],
     rules: [],
-    settings: { closeAfterAdd: false },
+    // ytMeta caches YouTube Data API results per video id so each video is
+    // fetched at most once; settings.ytApiKey holds the user's own Data API
+    // key (never exported — see exportState).
+    ytMeta: {},
+    settings: { closeAfterAdd: false, ytApiKey: '' },
   };
 }
 
@@ -121,10 +125,13 @@ export function topicCounts(state, topicId) {
 
 // Saving always lands the entry in the chosen topic's to_be_ordered queue
 // (spec §4.2). Re-saving a known URL moves it there, preserving its note and
-// resetting its queue even if it was done (defaults #3).
-export function saveTab(state, tab, topicId, suggestedByRuleId = null) {
+// resetting its queue even if it was done (defaults #3). When video metadata
+// is passed (or already cached for the URL), it is stamped onto the entry as
+// `entry.yt` so channel rules, search, and export work without re-fetching.
+export function saveTab(state, tab, topicId, suggestedByRuleId = null, ytMeta = null) {
   const url = normalizeUrl(tab && tab.url);
   if (!url || !state.topics.some((t) => t.id === topicId)) return { entry: null, moved: false };
+  const meta = ytMeta || ytMetaFor(state, url);
 
   const existing = findEntryByUrl(state, url);
   if (existing) {
@@ -137,6 +144,7 @@ export function saveTab(state, tab, topicId, suggestedByRuleId = null) {
     existing.dateAdded = Date.now();
     if (tab.title) existing.title = String(tab.title);
     existing.suggestedByRuleId = suggestedByRuleId;
+    if (meta) existing.yt = ytStamp(meta);
     return { entry: existing, moved: true };
   }
 
@@ -151,6 +159,7 @@ export function saveTab(state, tab, topicId, suggestedByRuleId = null) {
     note: '',
     suggestedByRuleId,
   };
+  if (meta) entry.yt = ytStamp(meta);
   state.entries.push(entry);
   return { entry, moved: false };
 }
@@ -206,6 +215,12 @@ export function normalizeRuleValue(type, value) {
       return v.toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/\/.*$/, '');
     case 'ytChannel':
       return v.toLowerCase().replace(/^@/, '');
+    case 'ytChannelId':
+      // Channel ids are case-sensitive 24-char tokens (UC + 22); anything
+      // else is rejected by returning '' (addRule/updateRule refuse it).
+      return /^UC[A-Za-z0-9_-]{22}$/.test(v) ? v : '';
+    case 'ytChannelName':
+      return v.replace(/\s+/g, ' ');
     default:
       return v;
   }
@@ -271,7 +286,98 @@ export function ytHandleOf(url) {
   return m ? m[1].replace(/^@/, '').toLowerCase() : null;
 }
 
-export function ruleMatches(rule, url) {
+// ---------------------------------------------------------------------------
+// YouTube video metadata (v2 enrichment via the Data API; see shared/youtube.js)
+// ---------------------------------------------------------------------------
+
+const YT_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+// Extract the 11-char video id from any YouTube video URL shape: /watch?v=…,
+// youtu.be/<id>, /shorts/<id>, /live/<id>, /embed/<id>, across youtube.com,
+// m.youtube.com, and music.youtube.com. Channel URLs and anything else
+// return null.
+export function youtubeVideoIdOf(url) {
+  let u;
+  try {
+    u = new URL(String(url));
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./, '').toLowerCase();
+  if (host === 'youtu.be') {
+    const id = u.pathname.split('/')[1] || '';
+    return YT_VIDEO_ID.test(id) ? id : null;
+  }
+  if (host !== 'youtube.com' && host !== 'm.youtube.com' && host !== 'music.youtube.com') return null;
+  if (u.pathname === '/watch') {
+    const id = u.searchParams.get('v') || '';
+    return YT_VIDEO_ID.test(id) ? id : null;
+  }
+  const m = u.pathname.match(/^\/(?:shorts|live|embed)\/([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Normalize a raw metadata record (Data API response mapping or imported
+// file) into the cached shape. The handle is stored the way ytHandleOf
+// returns it (no leading @, lowercase) so handle rules match either source.
+export function normalizeYtMeta(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = { videoId: raw.videoId ? String(raw.videoId) : undefined, fetchedAt: raw.fetchedAt || Date.now() };
+  if (raw.unavailable) {
+    out.unavailable = true;
+    return out;
+  }
+  if (raw.channelId) out.channelId = String(raw.channelId);
+  if (raw.channelName) out.channelName = String(raw.channelName);
+  if (raw.handle) out.handle = String(raw.handle).replace(/^@/, '').toLowerCase();
+  if (raw.publishedAt) out.publishedAt = String(raw.publishedAt);
+  return out;
+}
+
+// The denormalized copy stored on an entry: the matching-relevant fields
+// without cache bookkeeping (videoId/fetchedAt/unavailable).
+export function ytStamp(meta) {
+  const out = {};
+  if (meta.channelId) out.channelId = meta.channelId;
+  if (meta.channelName) out.channelName = meta.channelName;
+  if (meta.handle) out.handle = meta.handle;
+  if (meta.publishedAt) out.publishedAt = meta.publishedAt;
+  return out;
+}
+
+// Cached metadata for a video URL, or null when the URL is not a video, has
+// never been fetched, or the video is known-unavailable (tombstone).
+export function ytMetaFor(state, url) {
+  const id = youtubeVideoIdOf(url);
+  if (!id) return null;
+  const rec = state.ytMeta ? state.ytMeta[id] : null;
+  if (!rec || rec.unavailable) return null;
+  return rec;
+}
+
+// Keep the metadata cache bounded: past `cap` entries, drop the stalest.
+export function pruneYtMeta(state, cap = 500) {
+  const map = state.ytMeta;
+  if (!map) return;
+  const keys = Object.keys(map);
+  if (keys.length <= cap) return;
+  keys
+    .sort((a, b) => (map[a].fetchedAt || 0) - (map[b].fetchedAt || 0))
+    .slice(0, keys.length - cap)
+    .forEach((k) => delete map[k]);
+}
+
+// Stamp entries whose metadata arrived after they were saved (e.g. bulk
+// filing, where enrichment runs once after the whole save loop).
+export function backfillYtStamps(state) {
+  for (const e of state.entries) {
+    if (e.yt) continue;
+    const meta = ytMetaFor(state, e.url);
+    if (meta) e.yt = ytStamp(meta);
+  }
+}
+
+export function ruleMatches(rule, url, meta = null) {
   if (!rule || rule.enabled === false) return false;
   let u;
   try {
@@ -287,19 +393,29 @@ export function ruleMatches(rule, url) {
     return globToRegex(rule.value).test(u.href);
   }
   if (rule.type === 'ytChannel') {
-    const handle = ytHandleOf(u.href);
+    const handle = ytHandleOf(u.href) || (meta ? meta.handle : null);
     return !!handle && handle === rule.value;
+  }
+  if (rule.type === 'ytChannelId') {
+    return !!meta && !!meta.channelId && meta.channelId === rule.value;
+  }
+  if (rule.type === 'ytChannelName') {
+    return !!meta && !!meta.channelName && meta.channelName.toLowerCase() === rule.value.toLowerCase();
   }
   return false;
 }
 
 // First enabled matching rule in list order wins (user-controlled priority).
+// YouTube video URLs match channel rules through the cached metadata
+// (state.ytMeta), which surfaces populate before save — see youtube.js.
 export function matchUrl(state, url) {
-  return state.rules.find((r) => ruleMatches(r, url)) || null;
+  const meta = ytMetaFor(state, url);
+  return state.rules.find((r) => ruleMatches(r, url, meta)) || null;
 }
 
 // ---------------------------------------------------------------------------
-// Search (notes + title + URL + topic name; case-insensitive substring)
+// Search (notes + title + URL + topic name + YouTube channel; case-insensitive
+// substring)
 // ---------------------------------------------------------------------------
 
 export function searchEntries(state, query) {
@@ -313,6 +429,7 @@ export function searchEntries(state, query) {
         (e.note || '').toLowerCase().includes(q) ||
         (e.title || '').toLowerCase().includes(q) ||
         (e.url || '').toLowerCase().includes(q) ||
+        ((e.yt && e.yt.channelName) || '').toLowerCase().includes(q) ||
         topic.includes(q)
       );
     })
@@ -326,11 +443,18 @@ export function searchEntries(state, query) {
 
 // Export the whole state as a plain JSON object. `extras.keyboardShortcuts`
 // (if given) is embedded for reference only — importState ignores it, since
-// bindings are owned by Chrome and cannot be applied from a file.
+// bindings are owned by Chrome and cannot be applied from a file. The Data
+// API key is stripped (credentials must never land in export files) and the
+// regenerable ytMeta cache is dropped; each entry's stamped `yt` copy
+// travels with the entry.
 export function exportState(state, extras = {}) {
+  const settings = { ...(state.settings || {}) };
+  delete settings.ytApiKey;
   return JSON.parse(
     JSON.stringify({
       ...state,
+      ytMeta: undefined,
+      settings,
       keyboardShortcuts: extras.keyboardShortcuts ?? null,
       exportedAt: new Date().toISOString(),
     })
@@ -421,6 +545,7 @@ export function importState(current, incoming) {
       position,
       note: String(e.note || ''),
       suggestedByRuleId: null,
+      ...(e.yt ? { yt: ytStamp(normalizeYtMeta(e.yt) || e.yt) } : {}),
     });
     stats.entriesAdded++;
   }

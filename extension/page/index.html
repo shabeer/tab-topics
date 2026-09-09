@@ -39,6 +39,16 @@
 
   <div id="settings-panel" class="panel" hidden>
     <label class="chk"><input type="checkbox" id="close-after-setting"> Close tab after adding (default for picker)</label>
+    <div class="panel-row yt-key-row">
+      <label for="yt-api-key">YouTube Data API key</label>
+      <input id="yt-api-key" type="password" placeholder="paste key for YouTube enrichment" autocomplete="off" spellcheck="false">
+    </div>
+    <p class="panel-hint">
+      The key enables YouTube video enrichment (publish date, channel name, channel id) for
+      /watch and youtu.be links and channel-id/name rules. Create a free key at
+      console.cloud.google.com (enable “YouTube Data API v3”). It stays on this machine and is
+      only ever sent to googleapis.com; it is never included in exports.
+    </p>
     <div class="panel-row">
       <button id="export-btn">Export all data (JSON)</button>
       <label class="import-label">Import JSON…

@@ -4,6 +4,7 @@
 // (spec §4.2).
 
 import * as logic from '../shared/logic.js';
+import { ensureYtMeta } from '../shared/youtube.js';
 import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
@@ -21,6 +22,23 @@ const els = {
 let tab = null;
 let state = null;
 let entry = null;
+let userPickedTopicId = null; // topic the user chose manually; beats suggestions
+
+function buildTopicSelect() {
+  const suggestion = logic.matchUrl(state, tab.url);
+  const noTopic = logic.findTopicByName(state, 'NoTopic') || state.topics[0];
+  const targetTopicId = userPickedTopicId || (suggestion ? suggestion.topicId : noTopic?.id);
+  els.topicSelect.replaceChildren();
+  for (const topic of state.topics) {
+    const opt = document.createElement('option');
+    opt.value = topic.id;
+    let label = topic.name;
+    if (suggestion && suggestion.topicId === topic.id) label += ' — suggested';
+    opt.textContent = label;
+    if (topic.id === targetTopicId) opt.selected = true;
+    els.topicSelect.append(opt);
+  }
+}
 
 async function init() {
   try {
@@ -43,19 +61,17 @@ async function init() {
 
   if (!entry) {
     els.pickFirst.hidden = false;
-    const suggestion = logic.matchUrl(state, tab.url);
-    const noTopic = logic.findTopicByName(state, 'NoTopic') || state.topics[0];
-    const targetTopicId = suggestion ? suggestion.topicId : noTopic?.id;
-    els.topicSelect.replaceChildren();
-    for (const topic of state.topics) {
-      const opt = document.createElement('option');
-      opt.value = topic.id;
-      let label = topic.name;
-      if (suggestion && suggestion.topicId === topic.id) label += ' — suggested';
-      opt.textContent = label;
-      if (topic.id === targetTopicId) opt.selected = true;
-      els.topicSelect.append(opt);
-    }
+    els.topicSelect.addEventListener('change', () => {
+      userPickedTopicId = els.topicSelect.value;
+    });
+    buildTopicSelect();
+    // Video metadata may arrive after the URL-based suggestion rendered; if a
+    // channel rule now matches and the user hasn't picked, rebuild the select.
+    ensureYtMeta(state, tab.url).then(async (meta) => {
+      if (!meta) return;
+      if (!userPickedTopicId) buildTopicSelect();
+      await saveState(chromeAdapter(), state); // persist the cache fill
+    });
   } else {
     els.note.value = entry.note || '';
   }
@@ -76,7 +92,8 @@ async function save() {
     const topicId = els.topicSelect.value;
     if (!topicId) return;
     const suggestion = logic.matchUrl(state, tab.url);
-    const result = logic.saveTab(state, tab, topicId, suggestion ? suggestion.id : null);
+    const meta = await ensureYtMeta(state, tab.url);
+    const result = logic.saveTab(state, tab, topicId, suggestion ? suggestion.id : null, meta);
     entry = result.entry;
   }
   logic.setNote(state, entry.id, els.note.value);

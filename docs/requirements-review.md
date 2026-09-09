@@ -199,3 +199,37 @@ Chrome maps the manifest's `Ctrl` to **⌘ Command** on macOS. The default bindi
 ### Known v1 limitations (unchanged from §4.3)
 
 Enriched metadata (publish date, channel name), background/bulk classification scans, timestamped notes, multi-topic membership, cross-topic prioritization, and sync are deferred to v2. Chrome-only, Manifest V3, local storage only. Concurrent edits from two extension surfaces at once are last-write-wins on the whole state.
+
+## 8. v2 delta — YouTube video enrichment (September 2026)
+
+Implements the §4.3 deferrals "publish date, YouTube channel name" and "classification keyed on stored channel fields" for YouTube video URLs.
+
+### Approach decision
+
+Sources compared for getting publish date + channel name + channel id from a `/watch?v=…` URL:
+
+| Source | Channel id (`UC…`) | Channel name | Publish date | API key | Stability |
+| --- | --- | --- | --- | --- | --- |
+| **YouTube Data API v3 `videos.list` (chosen)** | yes | yes | yes | user-provided | official, stable |
+| oEmbed (`youtube.com/oembed`) | no | yes | no | none | official, stable |
+| Watch-page scraping (`ytInitialPlayerResponse`) | yes | yes | yes | none | fragile, ToS-gray |
+
+The Data API was chosen: it is the only source that returns the stable `UC…` channel id and the publish date in one official call (`part=snippet`, 1 quota unit against 10,000 free units/day). oEmbed supplies neither field; scraping was rejected as fragile. The key is user-supplied via Settings — never shipped with the extension — and is only ever sent to `www.googleapis.com`.
+
+### As built
+
+- `extension/shared/youtube.js` — `fetchVideoMeta` (one `GET /youtube/v3/videos?part=snippet&id=…` call; normalizes to `{videoId, channelId, channelName, handle, publishedAt, fetchedAt}`; empty `items` → unavailable tombstone so private/deleted videos are not refetched; HTTP/network errors → null and are *not* cached) and `ensureYtMeta` (cache-first orchestration; `fetchImpl` injectable so Node tests run without network).
+- Cache: `state.ytMeta` keyed by video id, capped at 500 records (stalest dropped). Recognized video URL shapes: `/watch?v=`, `youtu.be/<id>`, `/shorts/`, `/live/`, `/embed/` across `youtube.com`, `m.youtube.com`, `music.youtube.com`.
+- Entries are stamped `entry.yt = {channelId, channelName, handle, publishedAt}` at save time; `backfillYtStamps` covers bulk filing, where enrichment runs once after the save loop.
+- New rule types: `ytChannelId` (exact, case-sensitive; value must match `UC` + 22 chars) and `ytChannelName` (exact, case-insensitive channel title). The existing `ytChannel` handle rule additionally matches watch URLs when the fetched metadata carries the handle (from `snippet.customUrl`).
+- Matching stays synchronous — `matchUrl` reads the cache. Surfaces render the URL-based suggestion instantly, fetch metadata in the background, then re-run the suggestion; a manual user selection always wins over the refreshed suggestion.
+- Privacy posture change: `host_permissions: ["https://www.googleapis.com/*"]` replaces v1's "no host permissions, no external services" rule (§4.2). That one GET is the extension's only network call. Without a key — or on any fetch failure — behavior degrades exactly to v1 URL-only rules.
+- Export/import: `exportState` strips the API key and the regenerable `ytMeta` cache, while `entry.yt` stamps travel with entries; `importState` keeps the local key and accepts stamped entries and the new rule types. `schemaVersion` stays 1 — the `ytMeta` map and `ytApiKey` setting are added by additive migration in `loadState`, so v1 export files remain importable.
+- Search now also covers the channel name. The popup recents and manager entry subtitles show `channel name · published <date>` for enriched videos.
+- Tests: 47 total (28 v1 + 19 v2) covering URL-shape parsing, the new rule types, cache/tombstone/error behavior with an injected fetch, stamping/backfill, export/import hygiene, migration, and search.
+
+### Still deferred
+
+- Resolving `youtube.com/@handle` *channel* URLs to `UC…` ids (needs a second `channels.list` call); id/name rules therefore apply to watch URLs and stamped entries only.
+- Key-validation / "test key" UI; quota-exceeded feedback beyond console warnings and skipped enrichment.
+- Publish-date-based rules (e.g. older/newer than N days) — the date is stored, the rule type is not built.

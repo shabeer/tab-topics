@@ -40,6 +40,8 @@ body {
 .panel-hint code { background: var(--bg); padding: 1px 4px; border-radius: 4px; }
 .panel-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .panel-row input[type="text"] { flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.panel-row input[type="password"] { flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.yt-key-row label { font-size: 13px; white-space: nowrap; }
 .panel-row select, .panel-row button, .import-label { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); cursor: pointer; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover { opacity: 0.92; }

@@ -44,6 +44,20 @@ export async function loadState(adapter) {
     ensureTopic(raw, 'NoTopic');
     dirty = true;
   }
+  // Migration: states saved before YouTube enrichment existed get the
+  // metadata cache and the API key slot added. Both are additive, so
+  // schemaVersion stays 1 and v1 export files remain importable.
+  if (!raw.settings || typeof raw.settings !== 'object') {
+    raw.settings = { closeAfterAdd: false, ytApiKey: '' };
+    dirty = true;
+  } else if (raw.settings.ytApiKey === undefined) {
+    raw.settings.ytApiKey = '';
+    dirty = true;
+  }
+  if (!raw.ytMeta || typeof raw.ytMeta !== 'object') {
+    raw.ytMeta = {};
+    dirty = true;
+  }
   // Ensure NoTopic is at index 0 of topics list
   const noTopicIdx = raw.topics.findIndex((t) => t.name.toLowerCase() === 'notopic');
   if (noTopicIdx > 0) {
