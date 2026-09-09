@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>Tab Topics</h1>
+    <a href="#" id="open-manager">Manager ↗</a>
+  </header>
+
+  <section class="card">
+    <div class="tab-line"><span id="cur-title">…</span></div>
+    <div class="row">
+      <select id="topic-select"></select>
+      <button id="add-btn" class="primary">Add</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="close-after"> Close tab after adding</label>
+    <div id="save-status" class="status"></div>
+  </section>
+
+  <section class="card">
+    <button id="bulk-toggle" class="linkish">File all tabs in this window…</button>
+    <div id="bulk-area" hidden>
+      <div id="bulk-list"></div>
+      <label class="chk"><input type="checkbox" id="bulk-close-after"> Close tabs after filing</label>
+      <div class="row">
+        <button id="bulk-apply" class="primary">File tabs</button>
+        <button id="bulk-close" hidden>Close filed tabs</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <input id="search" type="search" placeholder="Search notes, titles, URLs, topics…">
+    <div id="results"></div>
+  </section>
+
+  <section class="card">
+    <h2>Recently saved</h2>
+    <div id="recent"></div>
+  </section>
+
+  <footer>
+    <span class="muted">⌥⇧U quick save · ⌥⇧N note · ⇧⌘Space popup</span>
+    <a href="#" id="shortcuts-link">Customize shortcuts</a>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

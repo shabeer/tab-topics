@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tab Topics — Manager</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div id="topbar">
+    <h1>Tab Topics</h1>
+    <input id="global-search" type="search" placeholder="Search notes, titles, URLs, topics…">
+    <button id="toggle-rules">Rules</button>
+    <button id="toggle-settings">Settings</button>
+  </div>
+
+  <div id="rules-panel" class="panel" hidden>
+    <p class="panel-hint">
+      Rules suggest a topic when you save a tab — the suggestion is pre-selected in the picker and
+      you confirm it (nothing files unattended). First matching rule wins.
+      YouTube-channel rules match URLs that contain the handle, e.g. <code>youtube.com/@handle/videos</code>.
+    </p>
+    <table id="rules-table">
+      <thead>
+        <tr><th>Match</th><th>Value</th><th>Topic</th><th>On</th><th></th></tr>
+      </thead>
+      <tbody id="rules-body"></tbody>
+    </table>
+    <div class="panel-row">
+      <select id="rule-type">
+        <option value="domain">Domain</option>
+        <option value="urlPattern">URL pattern (* wildcard)</option>
+        <option value="ytChannel">YouTube channel</option>
+      </select>
+      <input id="rule-value" type="text" placeholder="e.g. news.ycombinator.com / youtube.com/@handle / *github.com*">
+      <select id="rule-topic"></select>
+      <button id="rule-add" class="primary">Add rule</button>
+    </div>
+  </div>
+
+  <div id="settings-panel" class="panel" hidden>
+    <label class="chk"><input type="checkbox" id="close-after-setting"> Close tab after adding (default for picker)</label>
+    <div class="panel-row">
+      <button id="export-btn">Export all data (JSON)</button>
+      <label class="import-label">Import JSON…
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </label>
+      <a href="#" id="shortcuts-link">Keyboard shortcuts ↗</a>
+    </div>
+    <p class="panel-hint">
+      Import merges: new topics/entries/rules are added; on URL conflicts the local entry wins.
+      Keyboard bindings live in Chrome itself and cannot be exported by the extension.
+    </p>
+  </div>
+
+  <div id="layout">
+    <aside id="sidebar">
+      <ul id="topic-list"></ul>
+      <button id="new-topic" class="linkish">+ New topic</button>
+    </aside>
+    <main id="content"></main>
+  </div>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form">
+      <h3 id="dlg-title"></h3>
+      <label id="dlg-label" for="dlg-input"></label>
+      <input id="dlg-input" type="text" autocomplete="off">
+      <select id="dlg-select" hidden></select>
+      <div class="dlg-row">
+        <button value="ok" class="primary">OK</button>
+        <button value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="index.js"></script>
+</body>
+</html>

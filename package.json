@@ -1,0 +1,12 @@
+{
+  "name": "tab-topics-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome MV3 extension: save tabs into topics with to_be_ordered/ordered/done queues, notes, rule-based suggestions, search, and JSON export/import.",
+  "scripts": {
+    "test": "node --test",
+    "build": "node tools/validate.js",
+    "icons": "node tools/gen-icons.js"
+  }
+}

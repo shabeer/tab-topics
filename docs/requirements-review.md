@@ -1,8 +1,8 @@
 # Tab Organizer Extension — Requirements Review & Revised Specification
 
-**Status:** Draft for review (rev 2 — added `done` queue)
-**Date:** 2026-09-08
-**Purpose:** Record of the issues found in the original requirements, the clarifying decisions made, and the resulting revised specification (v2). No code has been written.
+**Status:** Implemented (v1 as-built) — originally Draft for review, rev 2 added the `done` queue
+**Date:** 2026-09-08 (as-built notes added 2026-09-09)
+**Purpose:** Record of the issues found in the original requirements, the clarifying decisions made, and the resulting revised specification (v2). The extension has been implemented, tested, and installed — see §7 for as-built notes and the README's verification section for the test log.
 
 ---
 
@@ -77,6 +77,11 @@
 | 7 | Multi-topic membership / duplicates? | **One topic per URL**; re-saving moves it |
 | 8 | When are draft classifications generated? | **Suggest at save time** — rules run when the shortcut is invoked; the picker pre-selects the match. No background watching |
 | 9 | Queue lifecycle — terminal "done" state? | **Added (post-review)** — each topic gets a third queue, `done`; entries can move into it from either `to_be_ordered` or `ordered` |
+| 10 | Save-tab shortcut | **⌥⇧U** (manifest `Alt+Shift+U`) — changed from the original ⇧⌘U to avoid collision with Chrome built-in chords |
+| 11 | NoTopic catch-all topic | **Added** — a reserved topic named `NoTopic` is seeded at install and recreated on load if deleted; bulk filing defaults unmatched tabs to it instead of skipping them |
+| 12 | Close tab after saving note | **Added** — an unchecked-by-default checkbox in the note editor window; mirrors the picker's existing close-after-add |
+| 13 | Bulk filing: close tabs + skip semantics | **Added** — an unchecked-by-default "Close tabs after filing" checkbox; tabs marked "— skip —" are excluded from entry creation *and* from closing |
+| 14 | Drag entry onto sidebar topic | **Added** — entry cards can be dragged from any queue column and dropped onto a sidebar topic item to move them to that topic's `to_be_ordered` queue |
 
 **Tension flagged during Q&A:** "Minimal metadata" (no stored channel name) vs. "classify by YouTube channel." Resolved: v1 rules match channels via URL patterns (domain, `youtube.com/@handle`); storing channel name as a field moves to v2.
 
@@ -89,17 +94,19 @@
 ### 4.1 Data model
 
 - **Tab entry:** id, title (tabs API), URL, date_added, topic_id, queue (`to_be_ordered` | `ordered` | `done`), position within its queue, single plain-text note (optional, editable anytime), optional record of which rule suggested the topic.
-- **Topic:** id, name, created_at. Rename allowed. Deletion requires moving its entries to another topic first (default — see §5).
+- **Topic:** id, name, created_at. Rename allowed. Deletion requires moving its entries to another topic first (default — see §5). A reserved **NoTopic** topic is seeded at install and recreated on load if missing; it serves as the default target for bulk filing when no topic is explicitly selected.
 - **Rule:** id, match type (domain | URL pattern | YouTube channel via URL handle), target topic, enabled flag. v1 matches on URL only.
 - **Settings:** shortcut bindings (within Chrome's limits), close-after-add preference, export/import.
 
 ### 4.2 Behavior
 
-**Saving a tab.** Keyboard shortcut → picker overlay (type-to-search / number keys) → matching rules pre-select/highlight a suggested topic → user confirms → entry lands in that topic's `to_be_ordered`. *This resolves original point 9: the "present draft → manual approval" step is folded into the picker confirmation rather than being a separate review screen (decision #8).* The picker includes an optional "close tab after adding" checkbox.
+**Saving a tab.** Keyboard shortcut (⌥⇧U on macOS, Alt+Shift+U on Windows/Linux) → picker overlay (type-to-search / number keys) → matching rules pre-select/highlight a suggested topic → user confirms → entry lands in that topic's `to_be_ordered`. *This resolves original point 9: the "present draft → manual approval" step is folded into the picker confirmation rather than being a separate review screen (decision #8).* The picker includes an optional "close tab after adding" checkbox.
 
-**Bulk window filing.** A "file all tabs in this window" action shows one picker row per tab (each may target a different topic, rules pre-filling); once every tab in the window is filed, the extension offers to close them. Entries persist regardless.
+**Saving a note.** Keyboard shortcut (⌥⇧N) → note editor window. If the tab is not yet saved, a topic picker is shown first (decision #12). The note editor includes a "Close tab after saving" checkbox, unchecked by default, that closes the source tab on save.
 
-**Queues.** Each topic has three queues: `to_be_ordered`, `ordered`, and `done`. New entries append to the end of `to_be_ordered`; moving to `ordered` is manual (drag-and-drop reorder — default); entries can move back, be reordered anytime, or be deleted anytime. Entries can move into `done` from either of the other two queues (decision #9). Done entries can be moved back out or deleted, and they remain searchable and included in export (defaults — see §5).
+**Bulk window filing.** A "file all tabs in this window" action shows one picker row per tab. Each row defaults its topic to **NoTopic** (decision #11); a matching rule overrides that default. Tabs marked "— skip —" are excluded entirely: no entry is created for them and they are never closed. A "Close tabs after filing" checkbox (unchecked by default, decision #13) auto-closes all filed (non-skipped) tabs when checked. Entries persist regardless of close state.
+
+**Queues.** Each topic has three queues: `to_be_ordered`, `ordered`, and `done`. New entries append to the end of `to_be_ordered`; moving to `ordered` is manual (drag-and-drop reorder — default); entries can move back, be reordered anytime, or be deleted anytime. Entries can move into `done` from either of the other two queues (decision #9). Done entries can be moved back out or deleted, and they remain searchable and included in export (defaults — see §5). Entry cards can also be dragged from any queue column and dropped onto a sidebar topic to move them to that topic's `to_be_ordered` queue (decision #14).
 
 **Duplicates.** Saving an already-saved URL moves it to the newly chosen topic's `to_be_ordered`; the existing note is preserved.
 
@@ -145,8 +152,46 @@ These were not explicitly confirmed in the Q&A; they follow conventional pattern
 
 ## 6. Review checklist
 
-- [ ] Confirm the nine locked decisions (§3) still stand.
-- [ ] Veto or accept the eight applied defaults (§5).
-- [ ] Confirm `done`-queue semantics (reversible; done entries stay searchable and exported).
-- [ ] Confirm the v2 deferral list (§4.3) is acceptable — especially enriched metadata (publish date / channel name) and the folded approval flow.
-- [ ] Decide whether cross-topic prioritization should be in scope after all (original aim said "prioritize").
+- [x] Confirm the nine locked decisions (§3) still stand.
+- [x] Veto or accept the eight applied defaults (§5) — accepted as written, plus the `done`-queue semantics recorded as decision #9.
+- [x] Confirm the v2 deferral list (§4.3) is acceptable — enriched metadata (publish date / channel name) and the folded approval flow stay as decided.
+- [x] Decide whether cross-topic prioritization should be in scope after all — stays deferred to v2; the `done` queue covers the consumption workflow.
+
+---
+
+## 7. As-built implementation notes (v1, September 2026)
+
+The spec above was implemented unchanged except where noted. Environment: **Chrome 152 on macOS (arm64)**, installed as an **unpacked extension** (ID `bnncfndaieaemoibgmgdmcdoakoflgdp`), version 0.1.0.
+
+### Spec → implementation map
+
+| Spec area | Implementation |
+|---|---|
+| Pure logic (queues, topics, rules, search, import/export) | `extension/shared/logic.js` — no `chrome.*` usage; unit-testable in Node |
+| Persistence | Whole state as one JSON blob under key `tabTopicsState` in `chrome.storage.local`, via `extension/shared/store.js`; every surface loads → mutates → saves (last-write-wins) |
+| Shortcut → picker (decisions #3, #8, #10) | Service worker (`background/service-worker.js`) listens to `chrome.commands`, captures the active tab, opens `quick/picker.html` or `quick/note.html` in a 460×560 popup window using `chrome.runtime.getURL(...)` (absolute URLs — a relative URL here silently fails in MV3; this bug was found and fixed during live verification) |
+| Approval flow (§4.2) | Rules pre-select the suggested topic in the picker; confirming is the approval. No separate review screen |
+| NoTopic catch-all (decision #11) | `newState()` seeds `NoTopic` at the top (index 0) followed by `General`; `ensureTopic('NoTopic')` recreates it at the top on load if deleted; bulk filing defaults every tab's topic select to NoTopic (rule suggestions override); the quick picker pre-selects the rule suggestion or NoTopic if no rule matches |
+| Note close-after (decision #12) | The note editor window includes a "Close tab after saving" checkbox, unchecked by default |
+| Bulk filing close + skip (decision #13) | "Close tabs after filing" checkbox, unchecked by default; tabs marked "— skip —" (empty select value) are excluded from entry creation and from closing |
+| Queues + done queue (decision #9) | `moveEntry` handles queue transitions, cross-topic moves, and reorder-with-position (clamped to queue bounds); the manager's drag-and-drop computes insert positions |
+| Cross-topic drag (decision #14) | Entry cards can be dragged from any queue column and dropped onto a sidebar topic item; the entry moves to that topic's `to_be_ordered` queue |
+| Duplicates | `saveTab` keys on the normalized URL string; re-save moves topic, resets queue to `to_be_ordered` (even from `done`), preserves the note, refreshes `dateAdded` |
+| Topic deletion (default #6) | Requires a move target; entries keep their queue; rules targeting the deleted topic are removed; the last remaining topic cannot be deleted |
+| Rules (§4.2) | Domain (host suffix match, `www.` stripped), URL pattern (glob `*`/`?`, case-insensitive), YouTube channel (matches only URLs containing the handle/channel path — `/watch?v=…` URLs carry no channel in v1). First *enabled* rule in list order wins |
+| Search (default #4) | Case-insensitive substring over note + title + URL + topic name, newest first |
+| Export/import (§4.2, default #5) | One JSON file, `schemaVersion: 1`, includes topics/entries/rules/settings + `exportedAt`. Import merges topics by name (ids remapped; fresh id on collision), dedupes rules, keeps local entries on URL conflicts and reports counts. Keyboard bindings are Chrome-owned and cannot be exported |
+| UI (decision #5) | Popup (`popup/`) for quick save, bulk window filing, search, recents; full-page manager (`page/`) for topics, three drag-and-drop queues, inline notes, rules editor, settings; quick windows (`quick/`) for the picker and note editor |
+| Permissions | `tabs`, `storage`, `favicon` only — no host permissions, no scraping, no external services (per §4.2) |
+
+### Keyboard shortcuts as built (macOS)
+
+Chrome maps the manifest's `Ctrl` to **⌘ Command** on macOS. The default bindings are: **⌥⇧U** quick picker (changed from ⇧⌘U), **⌥⇧N** note, **⇧⌘Space** popup (Windows/Linux: Alt+Shift+U / Alt+Shift+N / Ctrl+Shift+Space). Bindings are suggestions, editable at `chrome://extensions/shortcuts`.
+
+### Testing
+
+28 unit tests (`test/logic.test.js`, `npm test`) cover the logic layer including NoTopic at top, seeding, migration, and ensureTopic find-or-create; `npm run build` validates the manifest, JS syntax, and asset references; `npm run icons` regenerates the PNG icons dependency-free. Live-UI verification in Chrome covered the manager (topic creation via dialog, queue rendering), the picker (render + invalid-tab guard), and persistence across extension reloads and a full browser restart. Keyboard chords could not be machine-tested — Chrome's command dispatch requires trusted hardware input — so they are the one item to confirm by hand; see the README's verification section for the checklist and details.
+
+### Known v1 limitations (unchanged from §4.3)
+
+Enriched metadata (publish date, channel name), background/bulk classification scans, timestamped notes, multi-topic membership, cross-topic prioritization, and sync are deferred to v2. Chrome-only, Manifest V3, local storage only. Concurrent edits from two extension surfaces at once are last-write-wins on the whole state.

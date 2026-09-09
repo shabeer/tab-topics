@@ -1,0 +1,276 @@
+import * as logic from '../shared/logic.js';
+import { chromeAdapter, loadState, saveState } from '../shared/store.js';
+
+const els = {
+  curTitle: document.getElementById('cur-title'),
+  topicSelect: document.getElementById('topic-select'),
+  addBtn: document.getElementById('add-btn'),
+  closeAfter: document.getElementById('close-after'),
+  saveStatus: document.getElementById('save-status'),
+  bulkToggle: document.getElementById('bulk-toggle'),
+  bulkArea: document.getElementById('bulk-area'),
+  bulkList: document.getElementById('bulk-list'),
+  bulkApply: document.getElementById('bulk-apply'),
+  bulkClose: document.getElementById('bulk-close'),
+  bulkCloseAfter: document.getElementById('bulk-close-after'),
+  search: document.getElementById('search'),
+  results: document.getElementById('results'),
+  recent: document.getElementById('recent'),
+  openManager: document.getElementById('open-manager'),
+  shortcuts: document.getElementById('shortcuts-link'),
+};
+
+let state = null;
+let currentTab = null;
+let filedTabIds = [];
+
+function faviconFor(url) {
+  return `${chrome.runtime.getURL('/_favicon/')}?pageUrl=${encodeURIComponent(url)}&size=32`;
+}
+
+function hostOf(url) {
+  try { return new URL(url).host; } catch { return url; }
+}
+
+function populateTopicSelect(select, targetTopicId) {
+  select.replaceChildren();
+  const suggestion = currentTab ? logic.matchUrl(state, currentTab.url) : null;
+  const noTopic = logic.findTopicByName(state, 'NoTopic') || state.topics[0];
+  const targetId = targetTopicId || (suggestion ? suggestion.topicId : noTopic?.id);
+  for (const topic of state.topics) {
+    const opt = document.createElement('option');
+    opt.value = topic.id;
+    let label = topic.name;
+    if (suggestion && suggestion.topicId === topic.id) label += ' — suggested';
+    opt.textContent = label;
+    if (topic.id === targetId) opt.selected = true;
+    select.append(opt);
+  }
+}
+
+function queueBadge(queue) {
+  const span = document.createElement('span');
+  span.className = `qbadge ${queue}`;
+  span.textContent = queue === 'to_be_ordered' ? 'to order' : queue;
+  return span;
+}
+
+function entryRow(entry, topicName) {
+  const row = document.createElement('div');
+  row.className = 'recent-item';
+
+  const img = document.createElement('img');
+  img.src = faviconFor(entry.url);
+  img.alt = '';
+
+  const body = document.createElement('div');
+  body.className = 'body';
+  const t = document.createElement('div');
+  t.className = 't';
+  t.textContent = entry.title;
+  const s = document.createElement('div');
+  s.className = 's';
+  s.textContent = topicName ? `${topicName} · ${hostOf(entry.url)}` : hostOf(entry.url);
+  body.append(t, s);
+
+  row.append(img, body);
+  if (entry.note) {
+    const dot = document.createElement('span');
+    dot.className = 'note-dot';
+    dot.title = 'has note';
+    dot.textContent = '✎';
+    row.append(dot);
+  }
+  row.append(queueBadge(entry.queue));
+  row.addEventListener('click', () => {
+    chrome.tabs.create({ url: entry.url });
+    window.close();
+  });
+  return row;
+}
+
+function renderRecent() {
+  els.recent.replaceChildren();
+  const recent = [...state.entries].sort((a, b) => b.dateAdded - a.dateAdded).slice(0, 8);
+  if (!recent.length) {
+    const div = document.createElement('div');
+    div.className = 'empty';
+    div.textContent = 'Nothing saved yet. Use the picker above or Ctrl+Shift+U.';
+    els.recent.append(div);
+    return;
+  }
+  const names = new Map(state.topics.map((t) => [t.id, t.name]));
+  for (const entry of recent) els.recent.append(entryRow(entry, names.get(entry.topicId)));
+}
+
+function renderSearch() {
+  const q = els.search.value;
+  els.results.replaceChildren();
+  if (!q.trim()) return;
+  const hits = logic.searchEntries(state, q).slice(0, 8);
+  if (!hits.length) {
+    const div = document.createElement('div');
+    div.className = 'empty';
+    div.textContent = 'No matches.';
+    els.results.append(div);
+    return;
+  }
+  for (const { entry, topicName } of hits) els.results.append(entryRow(entry, topicName));
+}
+
+async function refreshCurrentTabCard() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+  currentTab = tab;
+  els.curTitle.textContent = tab.title || tab.url || 'Untitled tab';
+  els.curTitle.title = tab.url || '';
+  const suggestion = logic.matchUrl(state, tab.url);
+  populateTopicSelect(els.topicSelect, suggestion ? suggestion.topicId : null);
+}
+
+async function afterStateChange() {
+  await saveState(chromeAdapter(), state);
+  renderRecent();
+  renderSearch();
+}
+
+async function init() {
+  state = await loadState(chromeAdapter());
+  await refreshCurrentTabCard();
+
+  els.closeAfter.checked = !!state.settings.closeAfterAdd;
+  els.closeAfter.addEventListener('change', async () => {
+    state.settings.closeAfterAdd = els.closeAfter.checked;
+    await saveState(chromeAdapter(), state);
+  });
+
+  els.addBtn.addEventListener('click', async () => {
+    if (!currentTab || !els.topicSelect.value) return;
+    const suggestion = logic.matchUrl(state, currentTab.url);
+    const { moved } = logic.saveTab(state, currentTab, els.topicSelect.value, suggestion ? suggestion.id : null);
+    els.saveStatus.textContent = moved ? 'Moved to new topic (note kept)' : 'Saved ✓';
+    await afterStateChange();
+    if (els.closeAfter.checked) {
+      try { await chrome.tabs.remove(currentTab.id); } catch { /* already gone */ }
+      window.close();
+    }
+  });
+
+  // --- bulk: file all tabs in this window (spec §4.2) ---
+  els.bulkToggle.addEventListener('click', async () => {
+    if (!els.bulkArea.hidden) {
+      els.bulkArea.hidden = true;
+      return;
+    }
+    await renderBulk();
+    els.bulkArea.hidden = false;
+  });
+
+  els.bulkApply.addEventListener('click', async () => {
+    const rows = [...els.bulkList.querySelectorAll('.bulk-row')];
+    filedTabIds = [];
+    for (const row of rows) {
+      const tabId = Number(row.dataset.tabId);
+      const select = row.querySelector('select');
+      // "— skip —" (empty value) excludes the tab entirely: no entry, no close.
+      if (select.value === '') continue;
+      const info = { url: row.dataset.url, title: row.dataset.title };
+      const suggestion = logic.matchUrl(state, info.url);
+      logic.saveTab(state, info, select.value, suggestion ? suggestion.id : null);
+      filedTabIds.push(tabId);
+    }
+    await afterStateChange();
+    if (filedTabIds.length && els.bulkCloseAfter.checked) {
+      try { await chrome.tabs.remove(filedTabIds); } catch { /* some may be gone */ }
+      filedTabIds = [];
+      els.bulkClose.hidden = true;
+      els.bulkArea.hidden = true;
+      return;
+    }
+    els.bulkClose.hidden = filedTabIds.length === 0;
+    els.bulkClose.textContent = `Close ${filedTabIds.length} filed tab${filedTabIds.length === 1 ? '' : 's'}`;
+  });
+
+  els.bulkClose.addEventListener('click', async () => {
+    try { await chrome.tabs.remove(filedTabIds); } catch { /* some may be gone */ }
+    filedTabIds = [];
+    els.bulkClose.hidden = true;
+    els.bulkArea.hidden = true;
+  });
+
+  els.search.addEventListener('input', renderSearch);
+
+  els.openManager.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('page/index.html') });
+    window.close();
+  });
+  els.shortcuts.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    window.close();
+  });
+
+  renderRecent();
+}
+
+async function renderBulk() {
+  els.bulkList.replaceChildren();
+  els.bulkClose.hidden = true;
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const candidates = tabs.filter(
+    (t) => t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('devtools://')
+  );
+  if (!candidates.length) {
+    const div = document.createElement('div');
+    div.className = 'empty';
+    div.textContent = 'No fileable tabs in this window.';
+    els.bulkList.append(div);
+    return;
+  }
+  for (const tab of candidates) {
+    const row = document.createElement('div');
+    row.className = 'bulk-row';
+    row.dataset.tabId = String(tab.id);
+    row.dataset.url = tab.url;
+    row.dataset.title = tab.title || tab.url;
+
+    const img = document.createElement('img');
+    img.src = faviconFor(tab.url);
+    img.alt = '';
+
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = tab.title || tab.url;
+    t.title = tab.url;
+
+    const select = document.createElement('select');
+    const skip = document.createElement('option');
+    skip.value = '';
+    skip.textContent = '— skip —';
+    select.append(skip);
+
+    const suggestion = logic.matchUrl(state, tab.url);
+    const noTopic = logic.ensureTopic(state, 'NoTopic');
+    const targetTopicId = suggestion ? suggestion.topicId : noTopic.id;
+
+    for (const topic of state.topics) {
+      const opt = document.createElement('option');
+      opt.value = topic.id;
+      let label = topic.name;
+      if (suggestion && suggestion.topicId === topic.id) {
+        label += ' — suggested';
+      }
+      opt.textContent = label;
+      if (topic.id === targetTopicId) {
+        opt.selected = true;
+      }
+      select.append(opt);
+    }
+
+    row.append(img, t, select);
+    els.bulkList.append(row);
+  }
+}
+
+init();

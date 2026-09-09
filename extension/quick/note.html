@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Note for tab</title>
+  <link rel="stylesheet" href="quick.css">
+</head>
+<body>
+  <header>
+    <div id="tab-title">…</div>
+    <div id="tab-host"></div>
+  </header>
+
+  <div id="pick-first" hidden>
+    <p class="muted" style="padding: 0 14px; margin: 10px 0 6px">
+      This tab isn't saved yet — pick a topic to save it, then write the note:
+    </p>
+    <div class="row">
+      <select id="topic-select" style="flex: 1"></select>
+    </div>
+  </div>
+
+  <textarea id="note" placeholder="Note…"></textarea>
+
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="close-after"> Close tab after saving</label>
+  </div>
+  <div class="row">
+    <button id="save" class="primary">Save (Ctrl/⌘+Enter)</button>
+    <span id="status" class="muted"></span>
+  </div>
+  <div class="hint">Esc closes this window</div>
+
+  <script type="module" src="note.js"></script>
+</body>
+</html>
