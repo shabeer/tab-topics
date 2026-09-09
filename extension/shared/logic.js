@@ -20,7 +20,7 @@ export function newState() {
     rules: [],
     // ytMeta caches YouTube Data API results per video id so each video is
     // fetched at most once; settings.ytApiKey holds the user's own Data API
-    // key (never exported — see exportState).
+    // key (included in exportState).
     ytMeta: {},
     settings: { closeAfterAdd: false, ytApiKey: '' },
   };
@@ -232,7 +232,7 @@ export function addRule(state, { type, value, topicId }) {
   const norm = normalizeRuleValue(type, value);
   if (!norm) return null;
   const rule = { id: uid(), type, value: norm, topicId, enabled: true };
-  state.rules.push(rule);
+  state.rules.unshift(rule);
   return rule;
 }
 
@@ -258,6 +258,21 @@ export function updateRule(state, ruleId, patch) {
 
 export function deleteRule(state, ruleId) {
   state.rules = state.rules.filter((r) => r.id !== ruleId);
+}
+
+// Move a rule within the list to change its matching priority (spec: first
+// enabled rule in list order wins). `position` is the insert index; null appends.
+export function moveRule(state, ruleId, position = null) {
+  const rule = state.rules.find((r) => r.id === ruleId);
+  if (!rule) return false;
+  const list = state.rules.filter((r) => r.id !== ruleId);
+  const idx =
+    position === null || position === undefined
+      ? list.length
+      : Math.max(0, Math.min(position, list.length));
+  list.splice(idx, 0, rule);
+  state.rules = list;
+  return true;
 }
 
 function globToRegex(glob) {
@@ -437,6 +452,13 @@ export function searchEntries(state, query) {
     .map((e) => ({ entry: e, topicName: topicName.get(e.topicId) || '' }));
 }
 
+// Mask API key keeping only the first 4 and last 4 characters.
+export function maskApiKey(key) {
+  if (typeof key !== 'string' || !key) return '';
+  if (key.length <= 8) return '*'.repeat(key.length);
+  return key.slice(0, 4) + '*'.repeat(key.length - 8) + key.slice(-4);
+}
+
 // ---------------------------------------------------------------------------
 // Export / import (merge; local wins on URL conflicts — defaults #5)
 // ---------------------------------------------------------------------------
@@ -444,12 +466,14 @@ export function searchEntries(state, query) {
 // Export the whole state as a plain JSON object. `extras.keyboardShortcuts`
 // (if given) is embedded for reference only — importState ignores it, since
 // bindings are owned by Chrome and cannot be applied from a file. The Data
-// API key is stripped (credentials must never land in export files) and the
-// regenerable ytMeta cache is dropped; each entry's stamped `yt` copy
-// travels with the entry.
+// API key in settings is masked (first and last 4 characters preserved, middle
+// characters masked). The regenerable ytMeta cache is dropped; each entry's
+// stamped `yt` copy travels with the entry.
 export function exportState(state, extras = {}) {
   const settings = { ...(state.settings || {}) };
-  delete settings.ytApiKey;
+  if (typeof settings.ytApiKey === 'string' && settings.ytApiKey) {
+    settings.ytApiKey = maskApiKey(settings.ytApiKey);
+  }
   return JSON.parse(
     JSON.stringify({
       ...state,
@@ -556,6 +580,14 @@ export function importState(current, incoming) {
   if (noTopicIdx > 0) {
     const [noTopic] = current.topics.splice(noTopicIdx, 1);
     current.topics.unshift(noTopic);
+  }
+
+  // Import API key if incoming contains it and local doesn't have one set
+  if (incoming.settings && typeof incoming.settings.ytApiKey === 'string' && incoming.settings.ytApiKey) {
+    if (!current.settings) current.settings = { closeAfterAdd: false, ytApiKey: '' };
+    if (!current.settings.ytApiKey) {
+      current.settings.ytApiKey = incoming.settings.ytApiKey;
+    }
   }
 
   reindexAll(current);

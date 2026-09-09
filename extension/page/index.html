@@ -16,22 +16,23 @@
   <div id="rules-panel" class="panel" hidden>
     <p class="panel-hint">
       Rules suggest a topic when you save a tab — the suggestion is pre-selected in the picker and
-      you confirm it (nothing files unattended). First matching rule wins.
+      you confirm it (nothing files unattended). First matching rule wins. Drag rules to reorder priority.
       YouTube-channel rules match URLs that contain the handle, e.g. <code>youtube.com/@handle/videos</code>.
     </p>
     <table id="rules-table">
       <thead>
-        <tr><th>Match</th><th>Value</th><th>Topic</th><th>On</th><th></th></tr>
+        <tr><th class="handle-col"></th><th>Match</th><th>Value</th><th>Topic</th><th>On</th><th></th></tr>
       </thead>
       <tbody id="rules-body"></tbody>
     </table>
     <div class="panel-row">
       <select id="rule-type">
         <option value="domain">Domain</option>
-        <option value="urlPattern">URL pattern (* wildcard)</option>
-        <option value="ytChannel">YouTube channel</option>
+        <option value="urlPattern">URL pattern</option>
+        <option value="ytChannelName">YTChannelName</option>
+        <option value="ytChannelId">YTChannelID</option>
       </select>
-      <input id="rule-value" type="text" placeholder="e.g. news.ycombinator.com / youtube.com/@handle / *github.com*">
+      <input id="rule-value" type="text" placeholder="e.g. example.com">
       <select id="rule-topic"></select>
       <button id="rule-add" class="primary">Add rule</button>
     </div>
@@ -47,7 +48,7 @@
       The key enables YouTube video enrichment (publish date, channel name, channel id) for
       /watch and youtu.be links and channel-id/name rules. Create a free key at
       console.cloud.google.com (enable “YouTube Data API v3”). It stays on this machine and is
-      only ever sent to googleapis.com; it is never included in exports.
+      only ever sent to googleapis.com; it is included in exports in masked form.
     </p>
     <div class="panel-row">
       <button id="export-btn">Export all data (JSON)</button>

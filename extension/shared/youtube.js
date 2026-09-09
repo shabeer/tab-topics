@@ -14,10 +14,14 @@ export async function fetchVideoMeta(videoId, apiKey, fetchImpl) {
   const doFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
   if (!videoId || !apiKey || !doFetch) return null;
 
-  const url = `${API_URL}?part=snippet&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(apiKey)}`;
+  const url = `${API_URL}?part=snippet&id=${encodeURIComponent(videoId)}`;
   let res;
   try {
-    res = await doFetch(url);
+    res = await doFetch(url, {
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+      },
+    });
   } catch (err) {
     console.warn(`Tab Topics: YouTube metadata request failed for ${videoId}:`, err?.message || err);
     return null;

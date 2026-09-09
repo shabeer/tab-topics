@@ -247,13 +247,55 @@ test('disabled rules do not match; first enabled match wins', () => {
   const r1 = logic.addRule(s, { type: 'domain', value: 'example.com', topicId: t1.id });
   const r2 = logic.addRule(s, { type: 'urlPattern', value: '*example.com*', topicId: t2.id });
 
-  assert.equal(logic.matchUrl(s, 'https://example.com/x').id, r1.id); // array order
+  assert.equal(logic.matchUrl(s, 'https://example.com/x').id, r2.id); // r2 was added last, so it is at the top
 
-  logic.updateRule(s, r1.id, { enabled: false });
-  assert.equal(logic.matchUrl(s, 'https://example.com/x').id, r2.id); // falls through
+  logic.updateRule(s, r2.id, { enabled: false });
+  assert.equal(logic.matchUrl(s, 'https://example.com/x').id, r1.id); // falls through to r1
 
-  logic.deleteRule(s, r2.id);
+  logic.deleteRule(s, r1.id);
   assert.equal(logic.matchUrl(s, 'https://example.com/x'), null);
+});
+
+test('addRule inserts new rules at the top as highest priority', () => {
+  const s = fresh();
+  const t1 = s.topics[0];
+  const t2 = addTopic(s, 'Second');
+  const r1 = logic.addRule(s, { type: 'domain', value: 'example.com', topicId: t1.id });
+  const r2 = logic.addRule(s, { type: 'urlPattern', value: '*example.com/special*', topicId: t2.id });
+
+  assert.deepEqual(s.rules.map((r) => r.id), [r2.id, r1.id]);
+  assert.equal(logic.matchUrl(s, 'https://example.com/special').id, r2.id);
+});
+
+test('moveRule reorders rules and affects matchUrl evaluation priority', () => {
+  const s = fresh();
+  const t1 = s.topics[0];
+  const t2 = addTopic(s, 'Second');
+  const t3 = addTopic(s, 'Third');
+  const r1 = logic.addRule(s, { type: 'domain', value: 'example.com', topicId: t1.id });
+  const r2 = logic.addRule(s, { type: 'urlPattern', value: '*example.com/special*', topicId: t2.id });
+  const r3 = logic.addRule(s, { type: 'urlPattern', value: '*example.com*', topicId: t3.id });
+
+  // Because addRule adds at top, initial list is [r3, r2, r1]
+  assert.deepEqual(s.rules.map((r) => r.id), [r3.id, r2.id, r1.id]);
+  assert.equal(logic.matchUrl(s, 'https://example.com/special').id, r3.id);
+
+  // Move r2 to the top (position 0)
+  assert.equal(logic.moveRule(s, r2.id, 0), true);
+  assert.deepEqual(s.rules.map((r) => r.id), [r2.id, r3.id, r1.id]);
+  // Now r2 matches first for special URL
+  assert.equal(logic.matchUrl(s, 'https://example.com/special').id, r2.id);
+
+  // Move r2 to position clamped to end
+  assert.equal(logic.moveRule(s, r2.id, 999), true);
+  assert.deepEqual(s.rules.map((r) => r.id), [r3.id, r1.id, r2.id]);
+
+  // Move r1 to position 0
+  assert.equal(logic.moveRule(s, r1.id, 0), true);
+  assert.deepEqual(s.rules.map((r) => r.id), [r1.id, r3.id, r2.id]);
+
+  // Invalid rule id returns false
+  assert.equal(logic.moveRule(s, 'invalid-id', 0), false);
 });
 
 test('addRule validates type, value, and topic', () => {
@@ -515,21 +557,26 @@ function apiItem(overrides = {}) {
 }
 
 function fetchCounter(handler) {
-  const counter = { calls: 0 };
-  counter.impl = async (url) => {
+  const counter = { calls: 0, lastUrl: null, lastOptions: null };
+  counter.impl = async (url, options) => {
     counter.calls++;
-    return handler(url, counter.calls);
+    counter.lastUrl = url;
+    counter.lastOptions = options;
+    return handler(url, counter.calls, options);
   };
   return counter;
 }
 
-test('ensureYtMeta fetches once per video id, caches, and normalizes fields', async () => {
+test('ensureYtMeta passes API key in X-Goog-Api-Key header and fetches once per video id', async () => {
   const s = fresh();
   s.settings.ytApiKey = 'TESTKEY';
   const counter = fetchCounter(() => okResponse([apiItem()]));
 
   const meta1 = await yt.ensureYtMeta(s, WATCH, { fetchImpl: counter.impl });
   assert.equal(counter.calls, 1);
+  assert.equal(counter.lastUrl, 'https://www.googleapis.com/youtube/v3/videos?part=snippet&id=dQw4w9WgXcQ');
+  assert.equal(counter.lastUrl.includes('key='), false);
+  assert.equal(counter.lastOptions?.headers?.['X-Goog-Api-Key'], 'TESTKEY');
   assert.equal(meta1.videoId, 'dQw4w9WgXcQ');
   assert.equal(meta1.channelId, UC_A);
   assert.equal(meta1.channelName, 'Test Channel');
@@ -610,21 +657,32 @@ test('backfillYtStamps stamps entries enriched after save (bulk path)', () => {
 
 // --- export / import with YouTube data ------------------------------------------
 
-test('exportState strips the API key and cache but keeps entry stamps', () => {
+test('maskApiKey preserves first and last 4 characters, masking the rest', () => {
+  assert.equal(logic.maskApiKey('AIzaSyD1234567890abcdef'), 'AIza***************cdef');
+  assert.equal(logic.maskApiKey('123456789'), '1234*6789');
+  assert.equal(logic.maskApiKey('1234567890'), '1234**7890');
+  assert.equal(logic.maskApiKey('12345678'), '********');
+  assert.equal(logic.maskApiKey('SECRET'), '******');
+  assert.equal(logic.maskApiKey(''), '');
+  assert.equal(logic.maskApiKey(null), '');
+});
+
+test('exportState masks the API key in settings and strips cache but keeps entry stamps', () => {
   const s = fresh();
-  s.settings.ytApiKey = 'SECRET';
+  s.settings.ytApiKey = 'AIzaSyD1234567890abcdef';
   s.ytMeta['dQw4w9WgXcQ'] = logic.normalizeYtMeta({ channelName: 'Chan', fetchedAt: 1 });
   const e = save(s, WATCH, s.topics[0].id);
   assert.ok(e.yt);
 
   const out = logic.exportState(s);
-  assert.equal(out.settings.ytApiKey, undefined);
+  assert.equal(out.settings.ytApiKey, 'AIza***************cdef');
+  assert.equal(s.settings.ytApiKey, 'AIzaSyD1234567890abcdef'); // local state unmodified
   assert.equal(out.ytMeta, undefined);
   assert.equal(out.settings.closeAfterAdd, false);
   assert.equal(out.entries[0].yt.channelName, 'Chan');
 });
 
-test('importState carries entry stamps and never imports an API key', () => {
+test('importState carries entry stamps and keeps local API key on conflict', () => {
   const local = fresh();
   local.settings.ytApiKey = 'LOCALKEY';
   const incoming = {
@@ -647,8 +705,22 @@ test('importState carries entry stamps and never imports an API key', () => {
     settings: { closeAfterAdd: true, ytApiKey: 'IMPORTEDKEY' },
   };
   logic.importState(local, incoming);
-  assert.equal(local.settings.ytApiKey, 'LOCALKEY'); // local key kept
+  assert.equal(local.settings.ytApiKey, 'LOCALKEY'); // local key kept on conflict
   assert.equal(logic.findEntryByUrl(local, WATCH).yt.channelName, 'Chan');
+});
+
+test('importState imports API key if local key is empty', () => {
+  const local = fresh();
+  assert.equal(local.settings.ytApiKey, '');
+  const incoming = {
+    schemaVersion: 1,
+    topics: [{ id: 't1', name: 'General', createdAt: 1 }],
+    entries: [],
+    rules: [],
+    settings: { ytApiKey: 'IMPORTEDKEY' },
+  };
+  logic.importState(local, incoming);
+  assert.equal(local.settings.ytApiKey, 'IMPORTEDKEY');
 });
 
 test('loadState adds the ytMeta cache and key slot to pre-enrichment states', async () => {

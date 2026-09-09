@@ -7,13 +7,19 @@ import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 
 const QUEUE_LABELS = { to_be_ordered: 'To be ordered', ordered: 'Ordered', done: 'Done' };
 
+const RULE_TYPE_OPTIONS = [
+  { value: 'domain', label: 'Domain' },
+  { value: 'urlPattern', label: 'URL pattern' },
+  { value: 'ytChannelName', label: 'YTChannelName' },
+  { value: 'ytChannelId', label: 'YTChannelID' },
+];
+
 // Per-type hint for the rule value input in the rules panel.
 const RULE_VALUE_HINTS = {
   domain: 'e.g. example.com',
   urlPattern: 'glob with * and ?, e.g. *github.com/*/pulls',
-  ytChannel: 'channel handle, e.g. @veritasium',
-  ytChannelId: 'channel id, e.g. UCsXVk37bltHxD1rDPwtNM8Q (case-sensitive)',
   ytChannelName: 'exact channel name, e.g. Veritasium',
+  ytChannelId: 'channel id, e.g. UCsXVk37bltHxD1rDPwtNM8Q (case-sensitive)',
 };
 
 const els = {
@@ -503,7 +509,7 @@ function renderRulesPanel() {
   if (!state.rules.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 5;
+    td.colSpan = 6;
     td.className = 'empty';
     td.textContent = 'No rules yet. Rules pre-select a topic when you save a matching tab.';
     tr.append(td);
@@ -512,14 +518,22 @@ function renderRulesPanel() {
   }
   for (const rule of state.rules) {
     const tr = document.createElement('tr');
+    tr.className = 'rule-row';
+    tr.draggable = true;
+    tr.dataset.ruleId = rule.id;
+
+    const tdHandle = document.createElement('td');
+    tdHandle.className = 'drag-handle';
+    tdHandle.textContent = '⠿';
+    tdHandle.title = 'Drag to reorder rule priority';
 
     const tdType = document.createElement('td');
     const typeSel = document.createElement('select');
-    for (const rt of logic.RULE_TYPES) {
+    for (const optDef of RULE_TYPE_OPTIONS) {
       const opt = document.createElement('option');
-      opt.value = rt;
-      opt.textContent = rt;
-      opt.selected = rt === rule.type;
+      opt.value = optDef.value;
+      opt.textContent = optDef.label;
+      opt.selected = optDef.value === rule.type;
       typeSel.append(opt);
     }
     typeSel.addEventListener('change', async () => {
@@ -575,7 +589,51 @@ function renderRulesPanel() {
     });
     tdDel.append(del);
 
-    tr.append(tdType, tdValue, tdTopic, tdEnabled, tdDel);
+    tr.append(tdHandle, tdType, tdValue, tdTopic, tdEnabled, tdDel);
+
+    // --- drag & drop: reorder rule priority ---
+    tr.addEventListener('dragstart', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+        if (document.activeElement === e.target && e.target.selectionStart !== e.target.selectionEnd) {
+          return;
+        }
+      }
+      e.dataTransfer.setData('text/plain', rule.id);
+      e.dataTransfer.setData('application/x-rule-id', rule.id);
+      e.dataTransfer.effectAllowed = 'move';
+      tr.classList.add('dragging');
+    });
+    tr.addEventListener('dragend', () => {
+      tr.classList.remove('dragging');
+      document.querySelectorAll('#rules-body tr').forEach((el) => {
+        el.classList.remove('insert-above', 'insert-below');
+      });
+    });
+    tr.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const rect = tr.getBoundingClientRect();
+      const below = e.clientY > rect.top + rect.height / 2;
+      tr.classList.toggle('insert-below', below);
+      tr.classList.toggle('insert-above', !below);
+    });
+    tr.addEventListener('dragleave', () => tr.classList.remove('insert-above', 'insert-below'));
+    tr.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const ruleId = e.dataTransfer.getData('application/x-rule-id') || e.dataTransfer.getData('text/plain');
+      const below = tr.classList.contains('insert-below');
+      const list = [...els.rulesBody.querySelectorAll('tr.rule-row')];
+      const srcIdx = list.findIndex((row) => row.dataset.ruleId === ruleId);
+      let targetIdx = list.indexOf(tr) + (below ? 1 : 0);
+      if (srcIdx !== -1 && srcIdx < targetIdx) {
+        targetIdx--;
+      }
+      tr.classList.remove('insert-above', 'insert-below');
+      if (ruleId && logic.moveRule(state, ruleId, targetIdx)) {
+        await persistAndRender();
+      }
+    });
+
     els.rulesBody.append(tr);
   }
 }

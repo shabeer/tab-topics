@@ -218,15 +218,15 @@ The Data API was chosen: it is the only source that returns the stable `UC…` c
 
 ### As built
 
-- `extension/shared/youtube.js` — `fetchVideoMeta` (one `GET /youtube/v3/videos?part=snippet&id=…` call; normalizes to `{videoId, channelId, channelName, handle, publishedAt, fetchedAt}`; empty `items` → unavailable tombstone so private/deleted videos are not refetched; HTTP/network errors → null and are *not* cached) and `ensureYtMeta` (cache-first orchestration; `fetchImpl` injectable so Node tests run without network).
+- `extension/shared/youtube.js` — `fetchVideoMeta` (one `GET /youtube/v3/videos?part=snippet&id=…` call with the API key in the `X-Goog-Api-Key` header; normalizes to `{videoId, channelId, channelName, handle, publishedAt, fetchedAt}`; empty `items` → unavailable tombstone so private/deleted videos are not refetched; HTTP/network errors → null and are *not* cached) and `ensureYtMeta` (cache-first orchestration; `fetchImpl` injectable so Node tests run without network).
 - Cache: `state.ytMeta` keyed by video id, capped at 500 records (stalest dropped). Recognized video URL shapes: `/watch?v=`, `youtu.be/<id>`, `/shorts/`, `/live/`, `/embed/` across `youtube.com`, `m.youtube.com`, `music.youtube.com`.
 - Entries are stamped `entry.yt = {channelId, channelName, handle, publishedAt}` at save time; `backfillYtStamps` covers bulk filing, where enrichment runs once after the save loop.
 - New rule types: `ytChannelId` (exact, case-sensitive; value must match `UC` + 22 chars) and `ytChannelName` (exact, case-insensitive channel title). The existing `ytChannel` handle rule additionally matches watch URLs when the fetched metadata carries the handle (from `snippet.customUrl`).
 - Matching stays synchronous — `matchUrl` reads the cache. Surfaces render the URL-based suggestion instantly, fetch metadata in the background, then re-run the suggestion; a manual user selection always wins over the refreshed suggestion.
 - Privacy posture change: `host_permissions: ["https://www.googleapis.com/*"]` replaces v1's "no host permissions, no external services" rule (§4.2). That one GET is the extension's only network call. Without a key — or on any fetch failure — behavior degrades exactly to v1 URL-only rules.
-- Export/import: `exportState` strips the API key and the regenerable `ytMeta` cache, while `entry.yt` stamps travel with entries; `importState` keeps the local key and accepts stamped entries and the new rule types. `schemaVersion` stays 1 — the `ytMeta` map and `ytApiKey` setting are added by additive migration in `loadState`, so v1 export files remain importable.
+- Export/import: `exportState` includes the API key in settings in masked form (preserving first and last 4 characters) and strips the regenerable `ytMeta` cache, while `entry.yt` stamps travel with entries; `importState` keeps the local key (or populates it if empty) and accepts stamped entries and the new rule types. `schemaVersion` stays 1 — the `ytMeta` map and `ytApiKey` setting are added by additive migration in `loadState`, so v1 export files remain importable.
 - Search now also covers the channel name. The popup recents and manager entry subtitles show `channel name · published <date>` for enriched videos.
-- Tests: 47 total (28 v1 + 19 v2) covering URL-shape parsing, the new rule types, cache/tombstone/error behavior with an injected fetch, stamping/backfill, export/import hygiene, migration, and search.
+- Tests: 51 total (28 v1 + 23 v2) covering URL-shape parsing, the new rule types, cache/tombstone/error behavior with an injected fetch, header-based API key transport, stamping/backfill, export masking/hygiene, migration, and search.
 
 ### Still deferred
 

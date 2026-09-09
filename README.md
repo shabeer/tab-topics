@@ -31,21 +31,23 @@ and JSON export/import. Built to the revised specification in
     open from an extension page unless "Allow access to file URLs" is enabled
   - Drag entries between queues, or drag onto a sidebar topic to move cross-topic
   - Order →, Done ✓ buttons
-  - Rules tab (try domain rule example.com → News, then reload example.com and see the "suggested" badge in the picker) 
+  - Rules tab (try domain rule example.com → News, then reload example.com and see the "suggested" badge in the picker; drag and drop rows to reorder rule priority) 
   - Settings → Export
 
 - **Rule-based topic suggestions** — domain, URL-pattern (`*` wildcards),
   YouTube-channel-handle, YouTube-channel-id, and YouTube-channel-name rules
-  pre-select a topic in the quick picker and bulk filing. If no rules match,
-  **NoTopic** is pre-selected. In the save tab popup, simply pressing Enter
-  saves to the pre-selected topic (manual approval).
+  pre-select a topic in the quick picker and bulk filing. Drag-and-drop
+  reordering in the manager sets evaluation priority (first enabled match
+  wins). If no rules match, **NoTopic** is pre-selected. In the save tab
+  popup, simply pressing Enter saves to the pre-selected topic (manual
+  approval).
 - **YouTube video enrichment** — for `/watch?v=…`, `youtu.be/…`, `/shorts/…`,
   `/live/…`, and `/embed/…` links, the extension fetches the video's publish
   date, channel name, and channel id once (YouTube Data API v3, cached per
   video) and stamps them on the entry. Channel-id and channel-name rules can
   then classify watch URLs, recents/manager show the channel and publish date,
   and search covers the channel name. Requires a free Data API key pasted into
-  the manager's Settings (stays on this machine; never exported). Without a
+  the manager's Settings (included in export JSON in masked form). Without a
   key, everything works exactly as before on URL rules alone.
 - **Bulk filing** — "File all tabs in this window" in the popup: one topic
   select per tab (rules pre-select matching topics; unmatched tabs default to
@@ -131,13 +133,14 @@ hand. The spec-side view of the same information lives in
 
 ### v2 session — YouTube enrichment
 
-- **47/47 unit tests pass** (`npm test`): the 28 v1 tests plus 19 covering
+- **51/51 unit tests pass** (`npm test`): the 28 v1 tests plus 23 covering
   video-URL shape parsing (`/watch`, `youtu.be`, `/shorts`, `/live`,
   `/embed`, music/m hosts), `ytChannelId`/`ytChannelName` rule semantics and
   validation, handle rules matching through fetched metadata, `ensureYtMeta`
-  caching/tombstone/error behavior (injected fetch, no network),
-  entry stamping + bulk backfill, export/import key hygiene, the `loadState`
-  migration for pre-v2 states, and channel-name search.
+  caching/tombstone/error behavior (injected fetch, no network; key sent via
+  `X-Goog-Api-Key` header), entry stamping + bulk backfill, export/import key
+  masking and hygiene, the `loadState` migration for pre-v2 states, and
+  channel-name search.
 - **`npm run build` validates** with the new `shared/youtube.js` module and
   the `host_permissions` entry.
 - To verify by hand: reload the extension (Chrome will show the new
