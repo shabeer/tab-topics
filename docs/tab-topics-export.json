@@ -27,7 +27,7 @@
       "id": "fvcbfx4tmtu6fgcx",
       "note": "tsting notes and topic suggestion",
       "position": 0,
-      "queue": "to_be_ordered",
+      "queue": "done",
       "suggestedByRuleId": "1r23ocgxmtu678th",
       "title": "Full Speech | Gazi e Millat Hashmi miya | Milad Conference YMCA Ground Bangalore - YouTube",
       "topicId": "ef2v1lf6mtu674us",
@@ -43,6 +43,28 @@
       "title": "api.ipify.org",
       "topicId": "msr6vrw9mttxrjvr",
       "url": "https://api.ipify.org/"
+    },
+    {
+      "dateAdded": 1788971767514,
+      "id": "jgdcjd4rmtublm8q",
+      "note": "",
+      "position": 2,
+      "queue": "to_be_ordered",
+      "suggestedByRuleId": null,
+      "title": "README.md",
+      "topicId": "msr6vrw9mttxrjvr",
+      "url": "file:///Users/Shared/collab/shabtest/cloned/ADE_test_project/README.md"
+    },
+    {
+      "dateAdded": 1788971767514,
+      "id": "ksjwmspgmtublm8q",
+      "note": "",
+      "position": 3,
+      "queue": "to_be_ordered",
+      "suggestedByRuleId": null,
+      "title": "requirements-review.md",
+      "topicId": "msr6vrw9mttxrjvr",
+      "url": "file:///Users/Shared/collab/shabtest/cloned/ADE_test_project/docs/requirements-review.md"
     }
   ],
   "rules": [
@@ -75,5 +97,22 @@
       "name": "youtube"
     }
   ],
-  "exportedAt": "2026-09-09T15:42:59.120Z"
+  "keyboardShortcuts": [
+    {
+      "command": "_execute_action",
+      "shortcut": "Ctrl+Shift+Space",
+      "description": "Open the Tab Topics popup"
+    },
+    {
+      "command": "add-note",
+      "shortcut": "Alt+Shift+N",
+      "description": "Add or edit the note on the current tab"
+    },
+    {
+      "command": "save-tab",
+      "shortcut": "Alt+Shift+U",
+      "description": "Save current tab to a topic (quick picker)"
+    }
+  ],
+  "exportedAt": "2026-09-09T16:40:05.967Z"
 }
