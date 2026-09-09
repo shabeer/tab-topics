@@ -346,6 +346,27 @@ test('importState throws on unrecognized payloads', () => {
   assert.throws(() => logic.importState(s, { schemaVersion: 1 }));
 });
 
+test('exportState embeds keyboard shortcuts; importState ignores them', () => {
+  const s = fresh();
+  const shortcuts = [
+    { command: 'save-tab', shortcut: 'Alt+Shift+U', description: 'Save current tab to a topic' },
+    { command: 'add-note', shortcut: 'Alt+Shift+N', description: 'Add or edit the note on the current tab' },
+  ];
+  const exported = logic.exportState(s, { keyboardShortcuts: shortcuts });
+  assert.deepEqual(exported.keyboardShortcuts, shortcuts);
+  assert.equal(logic.exportState(s).keyboardShortcuts, null); // omitted extras
+
+  // A file carrying shortcuts (even malformed ones) imports fine and changes
+  // nothing beyond the regular topics/entries/rules data.
+  const before = JSON.stringify(s);
+  exported.keyboardShortcuts = [{ command: 'bogus', shortcut: 'Not+A+Real+Chord' }];
+  const stats = logic.importState(s, exported);
+  assert.equal(stats.topicsAdded, 0);
+  assert.equal(stats.entriesAdded, 0);
+  assert.equal(stats.rulesAdded, 0);
+  assert.equal(JSON.stringify(s), before);
+});
+
 // --- store adapters ---------------------------------------------------------
 
 test('memoryAdapter loadState initializes empty storage and round-trips saves', async () => {

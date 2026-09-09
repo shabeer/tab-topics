@@ -13,6 +13,7 @@ const els = {
   bulkApply: document.getElementById('bulk-apply'),
   bulkClose: document.getElementById('bulk-close'),
   bulkCloseAfter: document.getElementById('bulk-close-after'),
+  bulkRtl: document.getElementById('bulk-rtl'),
   search: document.getElementById('search'),
   results: document.getElementById('results'),
   recent: document.getElementById('recent'),
@@ -168,8 +169,12 @@ async function init() {
 
   els.bulkApply.addEventListener('click', async () => {
     const rows = [...els.bulkList.querySelectorAll('.bulk-row')];
+    // Bulk rows render in tab-strip order (left to right). The insertion-order
+    // checkbox reverses the processing order so rightmost tabs file first and
+    // land at the top of their queues.
+    const orderedRows = els.bulkRtl.checked ? [...rows].reverse() : rows;
     filedTabIds = [];
-    for (const row of rows) {
+    for (const row of orderedRows) {
       const tabId = Number(row.dataset.tabId);
       const select = row.querySelector('select');
       // "— skip —" (empty value) excludes the tab entirely: no entry, no close.

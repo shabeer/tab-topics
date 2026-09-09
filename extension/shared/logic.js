@@ -324,9 +324,16 @@ export function searchEntries(state, query) {
 // Export / import (merge; local wins on URL conflicts — defaults #5)
 // ---------------------------------------------------------------------------
 
-export function exportState(state) {
+// Export the whole state as a plain JSON object. `extras.keyboardShortcuts`
+// (if given) is embedded for reference only — importState ignores it, since
+// bindings are owned by Chrome and cannot be applied from a file.
+export function exportState(state, extras = {}) {
   return JSON.parse(
-    JSON.stringify({ ...state, exportedAt: new Date().toISOString() })
+    JSON.stringify({
+      ...state,
+      keyboardShortcuts: extras.keyboardShortcuts ?? null,
+      exportedAt: new Date().toISOString(),
+    })
   );
 }
 
@@ -352,6 +359,8 @@ export function importState(current, incoming) {
   ) {
     throw new Error('Unrecognized export file (expected Tab Topics schemaVersion 1)');
   }
+  // `incoming.keyboardShortcuts` is intentionally ignored: Chrome owns the
+  // actual bindings, so the exported copy is informational only.
 
   const stats = { topicsAdded: 0, entriesAdded: 0, conflictsKeptLocal: 0, rulesAdded: 0 };
 

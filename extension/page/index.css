@@ -86,7 +86,10 @@ button.linkish:hover { text-decoration: underline; }
 .topic-header h2 { margin: 0; font-size: 18px; }
 .topic-header .actions { display: flex; gap: 6px; }
 
-.queues { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+/* minmax(0, Nfr) pins the 40:40:20 ratio regardless of content — plain Nfr
+   columns can't shrink below their min-content width, so long titles/notes
+   distort the split. */
+.queues { display: grid; grid-template-columns: minmax(0, 40fr) minmax(0, 40fr) minmax(0, 20fr); gap: 12px; align-items: start; }
 @media (max-width: 900px) { .queues { grid-template-columns: 1fr; } }
 
 .queue { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; min-height: 120px; }
@@ -110,7 +113,7 @@ button.linkish:hover { text-decoration: underline; }
 .entry-body .s { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .entry-body .note-preview { color: #92400e; font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.entry-actions { display: flex; gap: 4px; flex: none; }
+.entry-actions { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 2px 24px; }
 .entry-actions button { font-size: 11px; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); cursor: pointer; white-space: nowrap; }
 .entry-actions button:hover { border-color: var(--accent); color: var(--accent); }
 .entry-actions button.done-btn:hover { border-color: var(--green); color: var(--green); }
@@ -131,6 +134,7 @@ button.linkish:hover { text-decoration: underline; }
 .search-item .t { font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-item .s { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-item .note { color: #92400e; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-item .icon-btn { flex: none; }
 
 .qbadge { flex: none; font-size: 10px; border-radius: 999px; padding: 1px 7px; border: 1px solid; }
 .qbadge.to_be_ordered { color: var(--muted); border-color: var(--border); }

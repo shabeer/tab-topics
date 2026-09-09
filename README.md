@@ -23,6 +23,12 @@ and JSON export/import. Built to the revised specification in
     `Ctrl+Shift+Space`. All bindings are suggestions; customize them at
     `chrome://extensions/shortcuts`.
 - **Manager** (toolbar icon → Manager ↗): 
+  - Three queue columns laid out 40% : 40% : 20% of the width
+    (to be ordered : ordered : done); long titles and notes are truncated with
+    an ellipsis and shown in full on hover
+  - ⧉ button on each entry (and search result) copies its URL to the clipboard
+    — the way to grab the address of a `file://` entry, which Chrome refuses to
+    open from an extension page unless "Allow access to file URLs" is enabled
   - Drag entries between queues, or drag onto a sidebar topic to move cross-topic
   - Order →, Done ✓ buttons
   - Rules tab (try domain rule example.com → News, then reload example.com and see the "suggested" badge in the picker) 
@@ -37,7 +43,10 @@ and JSON export/import. Built to the revised specification in
   **NoTopic**). Tabs marked "— skip —" are excluded entirely — no entry, no close.
   An unchecked-by-default "Close tabs after filing" checkbox auto-closes all
   filed (non-skipped) tabs when checked. A separate manual "Close filed tabs"
-  button remains available when the auto-close checkbox is off.
+  button remains available when the auto-close checkbox is off. An unchecked-by-default
+  "Insert in right-to-left tab order" checkbox controls the order entries land in
+  their queues: unchecked (default) files the tabs left to right, checked files
+  right to left so the rightmost tab gets the top position in its queue.
 - **NoTopic catch-all** — a reserved topic at the top of the topics list.
   Bulk filing and the quick picker default to it when no rule matches. If deleted,
   it is silently recreated at the top on next load.
@@ -48,8 +57,10 @@ and JSON export/import. Built to the revised specification in
 - **Search** — live search facility available in both the popup and manager page.
   Searches across custom notes, tab titles, URLs, and topic names (newest first).
 - **Export / Import** — export all plugin data (topics, entries with notes/queues/positions,
-  rules, settings) to a single JSON file. Importing merges topics by name, remaps IDs,
-  deduplicates rules, keeps local notes on same-URL conflicts, and reports summary stats.
+  rules, settings) to a single JSON file. The file also embeds a reference copy of the
+  keyboard shortcuts (read from the manifest); importing ignores it, since Chrome owns the
+  live bindings. Importing merges topics by name, remaps IDs, deduplicates rules, keeps
+  local notes on same-URL conflicts, and reports summary stats.
 - **Persistent** — entries live in `chrome.storage.local` and survive tab
   closes and browser restarts. Closing a tab never deletes its entry.
 
@@ -94,7 +105,7 @@ hand. The spec-side view of the same information lives in
 
 ### Automated verification — all green
 
-- **28/28 unit tests pass** (`npm test`, Node's built-in runner). Coverage:
+- **29/29 unit tests pass** (`npm test`, Node's built-in runner). Coverage:
   topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
   seeding, migration (recreated at top if missing), `ensureTopic` find-or-create,
   save-to-`to_be_ordered`, duplicate handling (note kept, queue reset even
@@ -178,8 +189,9 @@ an extension defect. The chords are the one item to confirm by hand:
   queue reset to `to_be_ordered`).
 - **Deleting a topic requires moving its entries** to another topic first;
   rules targeting a deleted topic are removed.
-- Keyboard bindings live in Chrome, so they cannot be included in the
-  extension's own export file.
+- Keyboard bindings live in Chrome, so they cannot be *applied* from an import
+  file; the export includes a reference copy of the manifest shortcuts, but
+  changing actual bindings is done at `chrome://extensions/shortcuts`.
 - Data is local to this browser profile (`chrome.storage.local`); no sync.
 - Concurrent edits from two extension surfaces at once (e.g. popup and manager)
   are last-write-wins on the whole state — fine for a single user, noted for

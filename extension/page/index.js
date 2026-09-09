@@ -248,7 +248,7 @@ function buildEntryRow(entry, queue) {
   a.target = '_blank';
   a.rel = 'noopener';
   a.textContent = entry.title;
-  a.title = entry.url;
+  a.title = entry.title; // full title on hover (truncated by CSS)
   const s = document.createElement('div');
   s.className = 's';
   s.textContent = `${hostOf(entry.url)} · saved ${fmtDate(entry.dateAdded)}`;
@@ -289,6 +289,22 @@ function buildEntryRow(entry, queue) {
       await persistAndRender();
     }));
   }
+  // Copy URL — also the workaround for file:// entries, which Chrome refuses
+  // to open from an extension page unless "Allow access to file URLs" is on.
+  const copyBtn = document.createElement('button');
+  copyBtn.title = 'Copy URL';
+  copyBtn.textContent = '⧉';
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(entry.url);
+      copyBtn.textContent = '✓';
+    } catch {
+      copyBtn.textContent = '✕';
+    }
+    setTimeout(() => { copyBtn.textContent = '⧉'; }, 1200);
+  });
+  actions.append(copyBtn);
+
   actions.append(mk('✎', 'Edit note', '', () => {
     editingEntryId = editingEntryId === entry.id ? null : entry.id;
     render();
@@ -300,8 +316,11 @@ function buildEntryRow(entry, queue) {
     }
   }));
 
-  main.append(img, body, actions);
+  // Actions sit on their own row below the title/timestamp block so the
+  // title gets the full card width.
+  main.append(img, body);
   row.append(main);
+  row.append(actions);
 
   if (editingEntryId === entry.id) {
     const editor = document.createElement('div');
@@ -425,7 +444,21 @@ function renderSearchResults() {
     badge.className = `qbadge ${entry.queue}`;
     badge.textContent = entry.queue === 'to_be_ordered' ? 'to order' : entry.queue;
 
-    item.append(img, body, badge);
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'icon-btn';
+    copyBtn.title = 'Copy URL';
+    copyBtn.textContent = '⧉';
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(entry.url);
+        copyBtn.textContent = '✓';
+      } catch {
+        copyBtn.textContent = '✕';
+      }
+      setTimeout(() => { copyBtn.textContent = '⧉'; }, 1200);
+    });
+
+    item.append(img, body, copyBtn, badge);
     list.append(item);
   }
   els.content.append(list);
@@ -627,7 +660,15 @@ async function init() {
   });
 
   els.exportBtn.addEventListener('click', () => {
-    const data = logic.exportState(state);
+    // Keyboard shortcuts are read from the manifest for reference; import
+    // ignores them because Chrome owns the live bindings.
+    const commands = chrome.runtime.getManifest().commands || {};
+    const keyboardShortcuts = Object.entries(commands).map(([command, cmd]) => ({
+      command,
+      shortcut: cmd.suggested_key ? cmd.suggested_key.default : null,
+      description: cmd.description || '',
+    }));
+    const data = logic.exportState(state, { keyboardShortcuts });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

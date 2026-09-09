@@ -82,6 +82,9 @@
 | 12 | Close tab after saving note | **Added** — an unchecked-by-default checkbox in the note editor window; mirrors the picker's existing close-after-add |
 | 13 | Bulk filing: close tabs + skip semantics | **Added** — an unchecked-by-default "Close tabs after filing" checkbox; tabs marked "— skip —" are excluded from entry creation *and* from closing |
 | 14 | Drag entry onto sidebar topic | **Added** — entry cards can be dragged from any queue column and dropped onto a sidebar topic item to move them to that topic's `to_be_ordered` queue |
+| 15 | Bulk filing insertion order | **Added** — an unchecked-by-default "Insert in right-to-left tab order" checkbox: unchecked files tabs left-to-right (tab-strip order), checked files right-to-left so the rightmost tab lands at the top of its queue |
+| 16 | Queue column widths | **Changed** — the three queue columns split the full width 40:40:20 (to_be_ordered : ordered : done); long titles and notes are truncated with ellipsis and shown in full on hover |
+| 17 | Keyboard shortcuts in export | **Added** — the export file embeds a reference copy of the manifest commands (`keyboardShortcuts`); import intentionally ignores it, since Chrome owns the live bindings and they cannot be applied from a file |
 
 **Tension flagged during Q&A:** "Minimal metadata" (no stored channel name) vs. "classify by YouTube channel." Resolved: v1 rules match channels via URL patterns (domain, `youtube.com/@handle`); storing channel name as a field moves to v2.
 
@@ -104,7 +107,7 @@
 
 **Saving a note.** Keyboard shortcut (⌥⇧N) → note editor window. If the tab is not yet saved, a topic picker is shown first (decision #12). The note editor includes a "Close tab after saving" checkbox, unchecked by default, that closes the source tab on save.
 
-**Bulk window filing.** A "file all tabs in this window" action shows one picker row per tab. Each row defaults its topic to **NoTopic** (decision #11); a matching rule overrides that default. Tabs marked "— skip —" are excluded entirely: no entry is created for them and they are never closed. A "Close tabs after filing" checkbox (unchecked by default, decision #13) auto-closes all filed (non-skipped) tabs when checked. Entries persist regardless of close state.
+**Bulk window filing.** A "file all tabs in this window" action shows one picker row per tab. Each row defaults its topic to **NoTopic** (decision #11); a matching rule overrides that default. Tabs marked "— skip —" are excluded entirely: no entry is created for them and they are never closed. A "Close tabs after filing" checkbox (unchecked by default, decision #13) auto-closes all filed (non-skipped) tabs when checked. An "Insert in right-to-left tab order" checkbox (unchecked by default, decision #15) controls the order entries are appended to their queues relative to the tab strip. Entries persist regardless of close state.
 
 **Queues.** Each topic has three queues: `to_be_ordered`, `ordered`, and `done`. New entries append to the end of `to_be_ordered`; moving to `ordered` is manual (drag-and-drop reorder — default); entries can move back, be reordered anytime, or be deleted anytime. Entries can move into `done` from either of the other two queues (decision #9). Done entries can be moved back out or deleted, and they remain searchable and included in export (defaults — see §5). Entry cards can also be dragged from any queue column and dropped onto a sidebar topic to move them to that topic's `to_be_ordered` queue (decision #14).
 
@@ -112,7 +115,7 @@
 
 **Search.** Available in popup and full page. Scope: notes **plus** title, URL, and topic name (the literal "notes only" reading would make note-less entries unsearchable — see §5). Substring matching.
 
-**Export/import.** One JSON file containing topics, entries (notes, queues, positions), rules, and settings, with a schema version field. Import merges; on URL conflicts the local entry wins and the conflict count is reported (default — see §5).
+**Export/import.** One JSON file containing topics, entries (notes, queues, positions), rules, and settings, with a schema version field. The file also embeds a reference copy of the keyboard shortcuts (`keyboardShortcuts`, read from the manifest — decision #17); import ignores that field. Import merges; on URL conflicts the local entry wins and the conflict count is reported (default — see §5).
 
 **Storage & privacy.** `chrome.storage.local`, single device, no sync in v1. Permissions: `tabs` only — no host permissions, no scraping, no external services; everything on-machine.
 
@@ -174,13 +177,14 @@ The spec above was implemented unchanged except where noted. Environment: **Chro
 | NoTopic catch-all (decision #11) | `newState()` seeds `NoTopic` at the top (index 0) followed by `General`; `ensureTopic('NoTopic')` recreates it at the top on load if deleted; bulk filing defaults every tab's topic select to NoTopic (rule suggestions override); the quick picker pre-selects the rule suggestion or NoTopic if no rule matches |
 | Note close-after (decision #12) | The note editor window includes a "Close tab after saving" checkbox, unchecked by default |
 | Bulk filing close + skip (decision #13) | "Close tabs after filing" checkbox, unchecked by default; tabs marked "— skip —" (empty select value) are excluded from entry creation and from closing |
+| Bulk filing insertion order (decision #15) | "Insert in right-to-left tab order" checkbox, unchecked by default; when checked, bulk rows are processed in reverse tab-strip order so rightmost tabs file first |
 | Queues + done queue (decision #9) | `moveEntry` handles queue transitions, cross-topic moves, and reorder-with-position (clamped to queue bounds); the manager's drag-and-drop computes insert positions |
 | Cross-topic drag (decision #14) | Entry cards can be dragged from any queue column and dropped onto a sidebar topic item; the entry moves to that topic's `to_be_ordered` queue |
 | Duplicates | `saveTab` keys on the normalized URL string; re-save moves topic, resets queue to `to_be_ordered` (even from `done`), preserves the note, refreshes `dateAdded` |
 | Topic deletion (default #6) | Requires a move target; entries keep their queue; rules targeting the deleted topic are removed; the last remaining topic cannot be deleted |
 | Rules (§4.2) | Domain (host suffix match, `www.` stripped), URL pattern (glob `*`/`?`, case-insensitive), YouTube channel (matches only URLs containing the handle/channel path — `/watch?v=…` URLs carry no channel in v1). First *enabled* rule in list order wins |
 | Search (default #4) | Case-insensitive substring over note + title + URL + topic name, newest first |
-| Export/import (§4.2, default #5) | One JSON file, `schemaVersion: 1`, includes topics/entries/rules/settings + `exportedAt`. Import merges topics by name (ids remapped; fresh id on collision), dedupes rules, keeps local entries on URL conflicts and reports counts. Keyboard bindings are Chrome-owned and cannot be exported |
+| Export/import (§4.2, default #5) | One JSON file, `schemaVersion: 1`, includes topics/entries/rules/settings + `exportedAt` + a `keyboardShortcuts` reference copy from the manifest (import ignores it — decision #17). Import merges topics by name (ids remapped; fresh id on collision), dedupes rules, keeps local entries on URL conflicts and reports counts | |
 | UI (decision #5) | Popup (`popup/`) for quick save, bulk window filing, search, recents; full-page manager (`page/`) for topics, three drag-and-drop queues, inline notes, rules editor, settings; quick windows (`quick/`) for the picker and note editor |
 | Permissions | `tabs`, `storage`, `favicon` only — no host permissions, no scraping, no external services (per §4.2) |
 
@@ -190,7 +194,7 @@ Chrome maps the manifest's `Ctrl` to **⌘ Command** on macOS. The default bindi
 
 ### Testing
 
-28 unit tests (`test/logic.test.js`, `npm test`) cover the logic layer including NoTopic at top, seeding, migration, and ensureTopic find-or-create; `npm run build` validates the manifest, JS syntax, and asset references; `npm run icons` regenerates the PNG icons dependency-free. Live-UI verification in Chrome covered the manager (topic creation via dialog, queue rendering), the picker (render + invalid-tab guard), and persistence across extension reloads and a full browser restart. Keyboard chords could not be machine-tested — Chrome's command dispatch requires trusted hardware input — so they are the one item to confirm by hand; see the README's verification section for the checklist and details.
+29 unit tests (`test/logic.test.js`, `npm test`) cover the logic layer including NoTopic at top, seeding, migration, ensureTopic find-or-create, and the keyboard-shortcuts-in-export/ignored-on-import contract; `npm run build` validates the manifest, JS syntax, and asset references; `npm run icons` regenerates the PNG icons dependency-free. Live-UI verification in Chrome covered the manager (topic creation via dialog, queue rendering), the picker (render + invalid-tab guard), and persistence across extension reloads and a full browser restart. Keyboard chords could not be machine-tested — Chrome's command dispatch requires trusted hardware input — so they are the one item to confirm by hand; see the README's verification section for the checklist and details.
 
 ### Known v1 limitations (unchanged from §4.3)
 
