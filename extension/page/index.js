@@ -58,6 +58,7 @@ let state = null;
 let selectedTopicId = null;
 let searchQuery = '';
 let editingEntryId = null; // note editor currently open, survives re-render
+const queueSortDirections = new Map(); // topicId:queue -> 'asc' | 'desc'
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -240,11 +241,35 @@ function buildQueueSection(topic, queue) {
 
   const entries = logic.entriesInQueue(state, topic.id, queue);
   const h = document.createElement('h3');
-  h.append(document.createTextNode(QUEUE_LABELS[queue]));
+  const titleSpan = document.createElement('span');
+  titleSpan.className = 'queue-title';
+  titleSpan.textContent = QUEUE_LABELS[queue];
+
+  const headerControls = document.createElement('div');
+  headerControls.className = 'queue-header-controls';
+
+  const sortKey = `${topic.id}:${queue}`;
+  const sortDirection = queueSortDirections.get(sortKey) || 'desc';
+  const sortBtn = document.createElement('button');
+  sortBtn.className = 'queue-sort-btn';
+  sortBtn.textContent = sortDirection === 'asc' ? 'Sort YT ↑' : 'Sort YT ↓';
+  sortBtn.title = sortDirection === 'asc'
+    ? 'Sort YouTube videos by published date (oldest first, click to toggle)'
+    : 'Sort YouTube videos by published date (newest first, click to toggle)';
+  sortBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const curAsc = queueSortDirections.get(sortKey) === 'asc';
+    logic.sortQueueByYoutubePublishDate(state, topic.id, queue, { ascending: curAsc });
+    queueSortDirections.set(sortKey, curAsc ? 'desc' : 'asc');
+    await persistAndRender();
+  });
+
   const n = document.createElement('span');
   n.className = 'n';
   n.textContent = String(entries.length);
-  h.append(n);
+
+  headerControls.append(sortBtn, n);
+  h.append(titleSpan, headerControls);
   section.append(h);
 
   if (!entries.length) {

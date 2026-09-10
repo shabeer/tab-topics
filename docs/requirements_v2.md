@@ -263,6 +263,8 @@ The PWA provides the full manager experience:
 - **Three queues per topic:** `to_be_ordered`, `ordered`, `done`. Entries can
   be moved between queues using buttons (Order →, Done ✓, ← Back). Touch
   drag-and-drop is supported but buttons are the primary mobile interaction.
+  Each queue supports sorting YouTube videos by published date (`Sort YT ↓` / `Sort YT ↑`)
+  with toggle between newest-first and oldest-first, maintaining undated tabs' relative order.
 - **Notes:** View and edit the plain-text note on any entry (inline editor).
 - **Entry actions:**
   - Copy URL (`⧉`)
@@ -478,9 +480,9 @@ video metadata, not user-specific data.)
 
 ### 10.1 Automated unit tests (Node, `node:test`)
 
-74 tests across logic and sync test suites (`npm test`):
+77 tests across logic and sync test suites (`npm test`):
 
-- **Logic layer (`test/logic.test.js` — 53 tests):**
+- **Logic layer (`test/logic.test.js` — 56 tests):**
   - Topic CRUD, NoTopic invariant, queue operations, reordering, duplicate handling.
   - Domain, URL pattern, and YouTube channel rules (`ytChannelId`, `ytChannelName`, `ytChannel`).
   - YouTube video URL parsing, API caching, tombstone and error handling.
@@ -488,6 +490,7 @@ video metadata, not user-specific data.)
   - Bulk filing skip semantics ("— skip —" values and "Skip all tabs" toggle).
   - Search across notes, titles, URLs, topics, and YouTube channel names.
   - Export masking and import merge with local-wins conflicts and tombstone hygiene.
+  - Queue sorting for YouTube videos by published date (newest/oldest toggle, undated tab relative stability).
 - **Sync primitives & helpers (`test/sync.test.js` — 6 tests):**
   - Device ID generation, clock offset adjustment, record stamping, tombstone creation and 30-day pruning, LWW comparisons with deterministic tiebreaking.
 - **3-way collection merge (`test/sync.test.js` — 4 tests):**

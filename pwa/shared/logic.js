@@ -212,6 +212,47 @@ export function deleteEntry(state, entryId) {
   return true;
 }
 
+// Sort only YouTube videos within a queue based on video published date.
+// Dated YouTube videos are moved to the top (sorted by published date).
+// Items without a published date (both undated YouTube videos and non-YouTube tabs)
+// keep their current relative ordering after the dated videos.
+export function sortQueueByYoutubePublishDate(state, topicId, queue, { ascending = false } = {}) {
+  if (!QUEUES.includes(queue)) return false;
+  if (!state.topics.some((t) => !isTombstone(t) && t.id === topicId)) return false;
+
+  const currentList = listFor(state, topicId, queue);
+  if (currentList.length <= 1) return true;
+
+  const datedYt = [];
+  const others = [];
+
+  for (let i = 0; i < currentList.length; i++) {
+    const entry = currentList[i];
+    const isYt = !!youtubeVideoIdOf(entry.url);
+    const pub = entry.yt?.publishedAt || ytMetaFor(state, entry.url)?.publishedAt;
+    const ts = pub ? Date.parse(pub) : NaN;
+
+    if (isYt && !Number.isNaN(ts)) {
+      datedYt.push({ entry, ts, originalIndex: i });
+    } else {
+      others.push(entry);
+    }
+  }
+
+  if (datedYt.length === 0) return true;
+
+  datedYt.sort((a, b) => {
+    if (a.ts !== b.ts) {
+      return ascending ? a.ts - b.ts : b.ts - a.ts;
+    }
+    return a.originalIndex - b.originalIndex;
+  });
+
+  const reordered = [...datedYt.map((item) => item.entry), ...others];
+  reindex(reordered);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Rules (classification suggestions)
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ let selectedTopicId = null;
 let activeQueue = 'to_be_ordered'; // 'to_be_ordered' | 'ordered' | 'done'
 let searchQuery = '';
 let editingEntryId = null;
+const queueSortDirections = new Map(); // topicId:queue -> 'asc' | 'desc'
 
 const RULE_TYPE_OPTIONS = [
   { value: 'domain', label: 'Domain' },
@@ -46,6 +47,7 @@ const els = {
   topicChips: document.getElementById('topic-chips'),
   newTopicBtn: document.getElementById('new-topic-btn'),
   curTopicHeading: document.getElementById('cur-topic-heading'),
+  sortYtBtn: document.getElementById('sort-yt-btn'),
   renameTopicBtn: document.getElementById('rename-topic-btn'),
   deleteTopicBtn: document.getElementById('delete-topic-btn'),
   queueTabs: document.getElementById('queue-tabs'),
@@ -170,6 +172,16 @@ function render() {
   const isNoTopic = topic.name.toLowerCase() === 'notopic';
   els.renameTopicBtn.hidden = isNoTopic;
   els.deleteTopicBtn.hidden = isNoTopic || state.topics.length <= 1;
+
+  // Update Sort YT button label & tooltip based on active queue's sort state
+  if (els.sortYtBtn) {
+    const sortKey = `${selectedTopicId}:${activeQueue}`;
+    const sortDirection = queueSortDirections.get(sortKey) || 'desc';
+    els.sortYtBtn.textContent = sortDirection === 'asc' ? 'Sort YT ↑' : 'Sort YT ↓';
+    els.sortYtBtn.title = sortDirection === 'asc'
+      ? 'Sort YouTube videos by published date (oldest first, click to toggle)'
+      : 'Sort YouTube videos by published date (newest first, click to toggle)';
+  }
 
   // Render Topic Chips
   els.topicChips.replaceChildren();
@@ -567,6 +579,14 @@ async function init() {
   });
 
   // Topic Management
+  els.sortYtBtn?.addEventListener('click', async () => {
+    const sortKey = `${selectedTopicId}:${activeQueue}`;
+    const curAsc = queueSortDirections.get(sortKey) === 'asc';
+    logic.sortQueueByYoutubePublishDate(state, selectedTopicId, activeQueue, { ascending: curAsc });
+    queueSortDirections.set(sortKey, curAsc ? 'desc' : 'asc');
+    await persistAndRender();
+  });
+
   els.newTopicBtn.addEventListener('click', async () => {
     const name = await openDialog({ title: 'New topic', label: 'Topic name' });
     if (!name) return;

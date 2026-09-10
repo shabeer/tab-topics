@@ -26,6 +26,9 @@ and JSON export/import. Built to the revised specification in
   - Three queue columns laid out 40% : 40% : 20% of the width
     (to be ordered : ordered : done); long titles and notes are truncated with
     an ellipsis and shown in full on hover
+  - **Sort YouTube videos by published date** — every queue column has a `Sort YT ↓` / `Sort YT ↑` button
+    that moves dated YouTube videos to the top sorted by published date (newest-first or oldest-first,
+    toggling on click) while preserving the relative ordering of all undated tabs
   - ⧉ button on each entry (and search result) copies its URL to the clipboard
     — the way to grab the address of a `file://` entry, which Chrome refuses to
     open from an extension page unless "Allow access to file URLs" is enabled
@@ -137,14 +140,14 @@ hand. The spec-side view of the same information lives in
 
 ### Automated verification — all green
 
-- **74/74 unit tests pass** (`npm test`, Node's built-in runner across 5 test suites):
-  - **53 logic tests (`test/logic.test.js`)**: Topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
+- **77/77 unit tests pass** (`npm test`, Node's built-in runner across 5 test suites):
+  - **56 logic tests (`test/logic.test.js`)**: Topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
     seeding, migration, `ensureTopic` find-or-create, save-to-`to_be_ordered`, duplicate handling, queue moves,
     reordering with clamped positions, domain/URL-pattern/YouTube-channel rule matching, first-enabled-rule-wins,
     disabled rules, search across notes/title/URL/topic/channel, export/import merge with local-wins conflicts,
     storage adapters, YouTube video-URL parsing, `ytChannelId`/`ytChannelName` rule semantics, `ensureYtMeta`
     caching/tombstone/error behavior, header-based API key transport, stamping/backfill, YouTube bulk topic determination,
-    and bulk skip all tabs.
+    bulk skip all tabs, and sorting YouTube videos by published date (newest/oldest toggle with undated tab stability).
   - **21 sync tests (`test/sync.test.js`)**: Unique device ID generation, Drive server clock offset calculation,
     record stamping, tombstone creation and 30-day pruning, LWW comparisons with deterministic tiebreaking,
     3-way collection merge with concurrent edits, tombstone deletion vs edit, resurrection, full state merge
@@ -163,6 +166,7 @@ hand. The spec-side view of the same information lives in
 - **Deletion sync**: Deletions recorded as tombstones and synced across devices with canonical topic ID remapping.
 - **Bulk filing**: Pre-fetches YouTube metadata to determine topics automatically, with "Skip all tabs" quick toggle.
 - **Open & Delete**: One-click `↗✕` / `↗ Open & Delete` action opens the tab and removes it from the queue.
+- **YouTube Queue Sorting**: `Sort YT ↓` / `Sort YT ↑` button in every queue moves dated YouTube videos to the top sorted by published date (newest or oldest first).
 
 ### Verified live in Chrome (v152, macOS)
 

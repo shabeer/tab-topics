@@ -835,3 +835,80 @@ test('bulk filing skips tabs when topic selection is empty string', () => {
   assert.equal(inQueue.length, 2);
   assert.equal(logic.findEntryByUrl(s, 'https://example.com/2'), null);
 });
+
+// --- sort YouTube videos by published date ------------------------------------
+
+test('sortQueueByYoutubePublishDate sorts newest first and moves dated YT to top', () => {
+  const s = fresh();
+  const t = s.topics[0];
+
+  const e1 = save(s, 'https://example.com/1', t.id);
+  const e2 = save(s, 'https://www.youtube.com/watch?v=aaaa1111aaa', t.id);
+  e2.yt = { publishedAt: '2021-01-01T00:00:00Z' };
+  const e3 = save(s, 'https://example.com/2', t.id);
+  const e4 = save(s, 'https://youtu.be/bbbb2222bbb', t.id);
+  e4.yt = { publishedAt: '2023-06-15T12:00:00Z' };
+  const e5 = save(s, 'https://www.youtube.com/watch?v=cccc3333ccc', t.id); // undated YT
+  const e6 = save(s, 'https://www.youtube.com/watch?v=dddd4444ddd', t.id);
+  e6.yt = { publishedAt: '2022-03-10T08:30:00Z' };
+
+  const ok = logic.sortQueueByYoutubePublishDate(s, t.id, 'to_be_ordered', { ascending: false });
+  assert.equal(ok, true);
+
+  const sorted = logic.entriesInQueue(s, t.id, 'to_be_ordered');
+  assert.deepEqual(
+    sorted.map((e) => e.url),
+    [
+      'https://youtu.be/bbbb2222bbb',       // 2023-06-15 (newest)
+      'https://www.youtube.com/watch?v=dddd4444ddd', // 2022-03-10
+      'https://www.youtube.com/watch?v=aaaa1111aaa', // 2021-01-01 (oldest dated)
+      'https://example.com/1',             // first non-dated tab
+      'https://example.com/2',             // second non-dated tab
+      'https://www.youtube.com/watch?v=cccc3333ccc', // undated YT keeps relative position
+    ]
+  );
+  assert.deepEqual(sorted.map((e) => e.position), [0, 1, 2, 3, 4, 5]);
+});
+
+test('sortQueueByYoutubePublishDate sorts oldest first when ascending is true', () => {
+  const s = fresh();
+  const t = s.topics[0];
+
+  const e1 = save(s, 'https://example.com/1', t.id);
+  const e2 = save(s, 'https://www.youtube.com/watch?v=aaaa1111aaa', t.id);
+  e2.yt = { publishedAt: '2021-01-01T00:00:00Z' };
+  const e3 = save(s, 'https://youtu.be/bbbb2222bbb', t.id);
+  e3.yt = { publishedAt: '2023-06-15T12:00:00Z' };
+  const e4 = save(s, 'https://example.com/2', t.id);
+
+  const ok = logic.sortQueueByYoutubePublishDate(s, t.id, 'to_be_ordered', { ascending: true });
+  assert.equal(ok, true);
+
+  const sorted = logic.entriesInQueue(s, t.id, 'to_be_ordered');
+  assert.deepEqual(
+    sorted.map((e) => e.url),
+    [
+      'https://www.youtube.com/watch?v=aaaa1111aaa', // 2021-01-01 (oldest)
+      'https://youtu.be/bbbb2222bbb',       // 2023-06-15 (newest)
+      'https://example.com/1',             // original relative order
+      'https://example.com/2',
+    ]
+  );
+  assert.deepEqual(sorted.map((e) => e.position), [0, 1, 2, 3]);
+});
+
+test('sortQueueByYoutubePublishDate handles queues with no dated YT or invalid topic/queue', () => {
+  const s = fresh();
+  const t = s.topics[0];
+
+  save(s, 'https://example.com/1', t.id);
+  save(s, 'https://example.com/2', t.id);
+
+  assert.equal(logic.sortQueueByYoutubePublishDate(s, t.id, 'to_be_ordered'), true);
+  const list = logic.entriesInQueue(s, t.id, 'to_be_ordered');
+  assert.deepEqual(list.map((e) => e.url), ['https://example.com/1', 'https://example.com/2']);
+
+  assert.equal(logic.sortQueueByYoutubePublishDate(s, 'nonexistent', 'to_be_ordered'), false);
+  assert.equal(logic.sortQueueByYoutubePublishDate(s, t.id, 'invalid_queue'), false);
+});
+

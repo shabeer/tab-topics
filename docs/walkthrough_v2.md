@@ -74,8 +74,9 @@ The desktop experience offers both quick single-tab saving and bulk window filin
    synced to Drive, and filed into their respective queues.
 
 **Notes, queue moves, and all other desktop actions** work seamlessly. In the
-manager, you can also use **↗✕** on any entry card to open the URL in a new
-tab and delete the entry in one step. Each change is saved locally first, then synced.
+manager, you can sort YouTube videos by published date in any queue (`Sort YT ↓` / `Sort YT ↑` toggle)
+and use **↗✕** on any entry card to open the URL in a new tab and delete the entry in one step.
+Each change is saved locally first, then synced.
 
 ---
 
@@ -147,8 +148,9 @@ Tap the Tab Topics icon on your home screen to open the full manager.
 Everything the desktop manager does, adapted for a phone screen:
 
 - **View topics** — a dropdown or hamburger drawer replaces the desktop sidebar.
-- **Browse queues** — the three queues (`to_be_ordered`, `ordered`, `done`)
-  display as stacked sections or swipeable tabs.
+- **Browse queues & sort** — the three queues (`to_be_ordered`, `ordered`, `done`)
+  display as stacked sections or swipeable tabs. Tap `Sort YT ↓` / `Sort YT ↑` to sort
+  the active queue's YouTube videos by published date (newest or oldest first).
 - **Move entries between queues** — tap "Order →" to move an entry from
   `to_be_ordered` to `ordered`; tap "Done ✓" to move it to `done`; tap
   "← Back" to reverse.
