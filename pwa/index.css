@@ -315,6 +315,7 @@ th { color: var(--muted); font-weight: 600; }
   justify-content: space-between;
   align-items: center;
   padding: 0 16px 8px;
+  gap: 8px;
 }
 
 .topic-title {
@@ -324,7 +325,14 @@ th { color: var(--muted); font-weight: 600; }
 
 .topic-btns {
   display: flex;
+  align-items: center;
   gap: 8px;
+  margin-left: auto;
+}
+
+#sort-yt-btn {
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 /* Entries List & Cards */
@@ -401,6 +409,8 @@ th { color: var(--muted); font-weight: 600; }
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #f1f5f9;
@@ -414,6 +424,7 @@ th { color: var(--muted); font-weight: 600; }
   border: 1px solid var(--border);
   cursor: pointer;
   color: var(--text);
+  margin: 0;
 }
 
 .entry-actions button.primary {
@@ -431,11 +442,12 @@ th { color: var(--muted); font-weight: 600; }
 
 .entry-actions button.open-del-btn {
   color: var(--danger);
-  margin-left: auto;
+  margin: 0;
 }
 
 .entry-actions button.del-btn {
   color: var(--danger);
+  margin: 0;
 }
 
 .note-edit-box {
