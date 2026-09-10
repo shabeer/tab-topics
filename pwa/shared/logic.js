@@ -110,9 +110,13 @@ function listFor(state, topicId, queue) {
     .sort((a, b) => a.position - b.position);
 }
 
-function reindex(list) {
+function reindex(list, batchId = null, now = Date.now()) {
   list.forEach((e, i) => {
-    e.position = i;
+    if (e.position !== i) {
+      e.position = i;
+      e.updatedAt = now;
+      if (batchId) e.batchId = batchId;
+    }
   });
 }
 
@@ -147,6 +151,7 @@ export function saveTab(state, tab, topicId, suggestedByRuleId = null, ytMeta = 
     existing.position = listFor(state, topicId, 'to_be_ordered').filter((e) => e.id !== existing.id).length;
     reindex(listFor(state, oldTopicId, oldQueue).filter((e) => e.id !== existing.id));
     existing.dateAdded = Date.now();
+    existing.updatedAt = Date.now();
     if (tab.title) existing.title = String(tab.title);
     existing.suggestedByRuleId = suggestedByRuleId;
     if (meta) existing.yt = ytStamp(meta);
@@ -156,11 +161,13 @@ export function saveTab(state, tab, topicId, suggestedByRuleId = null, ytMeta = 
   // Remove any stale tombstone for this URL if present
   state.entries = state.entries.filter((e) => !isTombstone(e) || e.url !== url);
 
+  const now = Date.now();
   const entry = {
     id: uid(),
     url,
     title: String(tab.title || url),
-    dateAdded: Date.now(),
+    dateAdded: now,
+    updatedAt: now,
     topicId,
     queue: 'to_be_ordered',
     position: listFor(state, topicId, 'to_be_ordered').length,
@@ -190,10 +197,20 @@ export function moveEntry(state, entryId, { queue = null, topicId = null, positi
       : Math.max(0, Math.min(position, dstList.length));
   dstList.splice(idx, 0, entry);
 
+  const now = Date.now();
+  const batchId = uid();
+
   entry.topicId = dstTopic;
   entry.queue = dstQueue;
-  reindex(srcList);
-  reindex(dstList);
+  entry.updatedAt = now;
+  entry.batchId = batchId;
+
+  reindex(srcList, batchId, now);
+  dstList.forEach((e, i) => {
+    e.position = i;
+    e.updatedAt = now;
+    e.batchId = batchId;
+  });
   return true;
 }
 
@@ -201,6 +218,7 @@ export function setNote(state, entryId, note) {
   const entry = state.entries.find((e) => !isTombstone(e) && e.id === entryId);
   if (!entry) return false;
   entry.note = String(note ?? '');
+  entry.updatedAt = Date.now();
   return true;
 }
 
@@ -249,7 +267,13 @@ export function sortQueueByYoutubePublishDate(state, topicId, queue, { ascending
   });
 
   const reordered = [...datedYt.map((item) => item.entry), ...others];
-  reindex(reordered);
+  const now = Date.now();
+  const batchId = uid();
+  reordered.forEach((entry, idx) => {
+    entry.position = idx;
+    entry.updatedAt = now;
+    entry.batchId = batchId;
+  });
   return true;
 }
 

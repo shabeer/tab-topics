@@ -142,20 +142,20 @@ hand. The spec-side view of the same information lives in
 
 ### Automated verification — all green
 
-- **77/77 unit tests pass** (`npm test`, Node's built-in runner across 5 test suites):
-  - **56 logic tests (`test/logic.test.js`)**: Topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
+- **79/79 unit tests pass** (`npm test`, Node's built-in runner across 5 test suites):
+  - **57 logic tests (`test/logic.test.js`)**: Topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
     seeding, migration, `ensureTopic` find-or-create, save-to-`to_be_ordered`, duplicate handling, queue moves,
     reordering with clamped positions, domain/URL-pattern/YouTube-channel rule matching, first-enabled-rule-wins,
     disabled rules, search across notes/title/URL/topic/channel, export/import merge with local-wins conflicts,
     storage adapters, YouTube video-URL parsing, `ytChannelId`/`ytChannelName` rule semantics, `ensureYtMeta`
     caching/tombstone/error behavior, header-based API key transport, stamping/backfill, YouTube bulk topic determination,
     bulk skip all tabs, and sorting YouTube videos by published date (newest/oldest toggle with undated tab stability).
-  - **21 sync tests (`test/sync.test.js`)**: Unique device ID generation, Drive server clock offset calculation,
+  - **22 sync tests (`test/sync.test.js`)**: Unique device ID generation, Drive server clock offset calculation,
     record stamping, tombstone creation and 30-day pruning, LWW comparisons with deterministic tiebreaking,
     3-way collection merge with concurrent edits, tombstone deletion vs edit, resurrection, full state merge
     with NoTopic invariant preservation, sequential queue reindexing across queues, settings sync, Google Drive
     REST client file creation/download/upload/error handling, full sync cycle, tab deletion sync across devices,
-    and canonical topic ID normalization across devices.
+    canonical topic ID normalization across devices, and cross-device queue sorting / position reordering sync.
 - **`npm run build` validates**: MV3 manifest parses, every manifest-referenced
   asset exists, all JS files parse as ES modules, every HTML-referenced local
   asset resolves, shared modules import cleanly and behave.

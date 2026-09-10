@@ -86,7 +86,7 @@ function isRecordModified(current, base) {
   // Shallow comparison of key fields
   const keys = new Set([...Object.keys(current), ...Object.keys(base)]);
   for (const k of keys) {
-    if (k === 'updatedAt' || k === 'deviceId' || k === 'batchId' || k === 'position') continue;
+    if (k === 'updatedAt' || k === 'deviceId' || k === 'batchId') continue;
     if (JSON.stringify(current[k]) !== JSON.stringify(base[k])) return true;
   }
   return false;

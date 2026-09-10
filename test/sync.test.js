@@ -520,4 +520,127 @@ describe('high-level sync engine (sync-engine.js)', () => {
     const entries = logic.entriesInQueue(resB2.mergedState, canonicalGeneral.id, 'to_be_ordered');
     assert.equal(entries.length, 0);
   });
+
+  it('syncs queue sorting and position reordering across devices', async () => {
+    // Device A setup
+    const adapterA = memoryAdapter();
+    const stateA = await loadState(adapterA);
+    const metaA = syncEngine.defaultSyncMeta();
+    metaA.enabled = true;
+    metaA.deviceId = 'dev_A';
+    await syncEngine.saveSyncMeta(adapterA, metaA);
+
+    const generalA = logic.findTopicByName(stateA, 'General');
+
+    // Add 3 entries: non-YT, older YT, newer YT
+    const e1 = logic.saveTab(stateA, { url: 'https://example.com/article', title: 'Article' }, generalA.id).entry;
+    const e2 = logic.saveTab(stateA, { url: 'https://www.youtube.com/watch?v=vidOld11111', title: 'Old Video' }, generalA.id).entry;
+    e2.yt = { publishedAt: '2021-01-01T00:00:00Z' };
+    const e3 = logic.saveTab(stateA, { url: 'https://www.youtube.com/watch?v=vidNew22222', title: 'New Video' }, generalA.id).entry;
+    e3.yt = { publishedAt: '2024-05-01T00:00:00Z' };
+
+    await saveState(adapterA, stateA);
+
+    // Initial order on Device A: [e1, e2, e3]
+    assert.deepEqual(
+      logic.entriesInQueue(stateA, generalA.id, 'to_be_ordered').map((e) => e.id),
+      [e1.id, e2.id, e3.id]
+    );
+
+    // Mock Drive Cloud
+    let cloudData = null;
+    let cloudRev = 1;
+
+    const mockFetch = async (url, opts) => {
+      if (url.includes('/files?spaces=appDataFolder')) {
+        return { ok: true, json: async () => ({ files: [{ id: 'sync_file_sort', name: 'tabtopics-state.json' }] }) };
+      }
+      if (url.includes('/files/sync_file_sort?alt=media')) {
+        return {
+          ok: true,
+          headers: new Map([['date', new Date().toUTCString()]]),
+          json: async () => cloudData,
+        };
+      }
+      if (url.includes('/files/sync_file_sort?fields=')) {
+        return { ok: true, json: async () => ({ id: 'sync_file_sort', headRevisionId: `rev_${cloudRev}` }) };
+      }
+      if (url.includes('/upload/drive/v3/files/sync_file_sort')) {
+        cloudData = JSON.parse(opts.body);
+        cloudRev++;
+        return {
+          ok: true,
+          headers: new Map([['date', new Date().toUTCString()]]),
+          json: async () => ({ id: 'sync_file_sort', headRevisionId: `rev_${cloudRev}` }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    // 1. Device A initial sync to Drive
+    await syncEngine.performSync({
+      adapter: adapterA,
+      getToken: async () => 'token_A',
+      fetchImpl: mockFetch,
+    });
+
+    // 2. Device B initial sync from Drive
+    const adapterB = memoryAdapter();
+    const metaB = syncEngine.defaultSyncMeta();
+    metaB.enabled = true;
+    metaB.deviceId = 'dev_B';
+    await syncEngine.saveSyncMeta(adapterB, metaB);
+
+    await syncEngine.performSync({
+      adapter: adapterB,
+      getToken: async () => 'token_B',
+      fetchImpl: mockFetch,
+    });
+
+    const stateB1 = await loadState(adapterB);
+    const generalB = logic.findTopicByName(stateB1, 'General');
+    assert.deepEqual(
+      logic.entriesInQueue(stateB1, generalB.id, 'to_be_ordered').map((e) => e.id),
+      [e1.id, e2.id, e3.id]
+    );
+
+    // 3. Device A sorts the queue by YouTube publish date (newest first)
+    const stateA2 = await loadState(adapterA);
+    assert.equal(logic.sortQueueByYoutubePublishDate(stateA2, generalA.id, 'to_be_ordered', { ascending: false }), true);
+    await saveState(adapterA, stateA2);
+
+    // Sorted order on Device A should be: [e3 (2024), e2 (2021), e1 (article)]
+    assert.deepEqual(
+      logic.entriesInQueue(stateA2, generalA.id, 'to_be_ordered').map((e) => e.id),
+      [e3.id, e2.id, e1.id]
+    );
+
+    // 4. Device A syncs sorted state to Drive
+    const resA = await syncEngine.performSync({
+      adapter: adapterA,
+      getToken: async () => 'token_A',
+      fetchImpl: mockFetch,
+    });
+    assert.equal(resA.ok, true);
+
+    // 5. Device B syncs from Drive
+    const resB = await syncEngine.performSync({
+      adapter: adapterB,
+      getToken: async () => 'token_B',
+      fetchImpl: mockFetch,
+    });
+    assert.equal(resB.ok, true);
+
+    // 6. Verify Device B has the exact sorted order [e3, e2, e1]
+    const stateB2 = await loadState(adapterB);
+    const sortedEntriesB = logic.entriesInQueue(stateB2, generalB.id, 'to_be_ordered');
+    assert.deepEqual(
+      sortedEntriesB.map((e) => e.id),
+      [e3.id, e2.id, e1.id]
+    );
+    assert.deepEqual(
+      sortedEntriesB.map((e) => e.position),
+      [0, 1, 2]
+    );
+  });
 });

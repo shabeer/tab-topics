@@ -480,9 +480,9 @@ video metadata, not user-specific data.)
 
 ### 10.1 Automated unit tests (Node, `node:test`)
 
-77 tests across logic and sync test suites (`npm test`):
+79 tests across logic and sync test suites (`npm test`):
 
-- **Logic layer (`test/logic.test.js` — 56 tests):**
+- **Logic layer (`test/logic.test.js` — 57 tests):**
   - Topic CRUD, NoTopic invariant, queue operations, reordering, duplicate handling.
   - Domain, URL pattern, and YouTube channel rules (`ytChannelId`, `ytChannelName`, `ytChannel`).
   - YouTube video URL parsing, API caching, tombstone and error handling.
@@ -499,8 +499,8 @@ video metadata, not user-specific data.)
   - NoTopic topic invariant preservation at index 0, sequential queue reindexing across queues, YouTube metadata stamp preservation and settings sync.
 - **Google Drive REST client (`test/sync.test.js` — 4 tests):**
   - Finding and creating state file in `appDataFolder`, download/upload payloads, HTTP error translation into `DriveError`.
-- **High-level sync engine (`test/sync.test.js` — 4 tests):**
-  - Disabled status when sync off, complete sync cycle with memory adapter, cross-device tab deletion sync (verifying tab deleted on device A disappears on device B), canonical topic ID normalization across devices with independently generated IDs.
+- **High-level sync engine (`test/sync.test.js` — 5 tests):**
+  - Disabled status when sync off, complete sync cycle with memory adapter, cross-device tab deletion sync (verifying tab deleted on device A disappears on device B), canonical topic ID normalization across devices with independently generated IDs, and cross-device queue sorting / position reordering sync.
 
 ### 10.2 Integration & Manual verification
 
