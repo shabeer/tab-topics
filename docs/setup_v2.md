@@ -176,26 +176,32 @@ and `pwa/shared/`. Client-specific authentication lives at each client's root
 (`extension/auth.js` for Chrome Identity and `pwa/auth.js` for GIS). During
 development, keep the shared files in sync.
 
-### 3.3 Configure the PWA manifest
+### 3.3 Verify or customize the PWA manifest
 
-In `pwa/manifest.webmanifest`, set the Web OAuth client ID and share target:
+`pwa/manifest.webmanifest` comes **pre-configured** out of the box with the necessary settings for standalone display and the Android Web Share Target API.
+
+**For standard deployments, no changes are required.**
+
+However, you should review the configuration if you wish to customize the app appearance or verify path settings:
 
 ```json
 {
   "name": "Tab Topics",
   "short_name": "Tab Topics",
-  "start_url": "/",
+  "description": "Organize and prioritize your tabs and links across devices.",
+  "start_url": "./index.html",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#ffffff",
-  "theme_color": "#4a90d9",
+  "theme_color": "#3b82f6",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "share_target": {
-    "action": "/share-receive.html",
+    "action": "./share-receive.html",
     "method": "GET",
     "params": {
       "title": "title",
@@ -206,16 +212,36 @@ In `pwa/manifest.webmanifest`, set the Web OAuth client ID and share target:
 }
 ```
 
-**Important:** The `share_target.action` must be an absolute path within the
-manifest's scope. Use `/share-receive.html` (not a relative path).
+#### What each field does & when to customize:
+
+- **`share_target` (Required for Android sharing):** Enables Tab Topics to appear in Android's system share menu (e.g., sharing a URL from mobile Chrome or the YouTube app). The action points to `./share-receive.html` to process shared links. Leave this as-is.
+- **`start_url` (`./index.html`):** The URL loaded when launching the installed PWA from your home screen. Using `./index.html` ensures it works whether hosted at a domain root or in a GitHub Pages subfolder (e.g. `https://<username>.github.io/<repo>/`).
+- **`name` & `short_name` (Optional customization):** The display name shown under the home screen icon and splash screen. You can change this to your preferred app title.
+- **`theme_color` & `background_color` (Optional customization):** The browser toolbar tint and splash screen background color.
+- **`icons` (Optional customization):** Icons used for the home screen and splash screens in `pwa/icons/`.
+
+*(Note: Web App Manifests do not configure OAuth credentials. OAuth client IDs are configured in JavaScript via Google Identity Services as described in §3.4 below.)*
 
 ### 3.4 Configure the GIS client ID
 
-In `pwa/auth.js`, set the Web application OAuth client ID:
+Configure the Web application OAuth Client ID (Client B from §1.4) for Google Identity Services (GIS). You can set this in either of two places:
+
+**Option A (Recommended) — in `pwa/index.html`:**
+
+Set `window.TAB_TOPICS_CLIENT_ID` in the `<head>` of `pwa/index.html`:
+
+```html
+<script>
+  window.TAB_TOPICS_CLIENT_ID = '<Client ID from step 1.4 — Client B>';
+</script>
+```
+
+**Option B — in `pwa/auth.js`:**
+
+Update the fallback client ID in `getPwaAuthToken()` in `pwa/auth.js`:
 
 ```javascript
-const CLIENT_ID = '<Client ID from step 1.4 — Client B>';
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const cid = clientId || window.TAB_TOPICS_CLIENT_ID || '<Client ID from step 1.4 — Client B>';
 ```
 
 ### 3.5 Deploy to GitHub Pages
@@ -420,7 +446,7 @@ The sync file is stored in Drive's hidden `appDataFolder`. To delete it:
 | Item | Where to find it | Where it goes | Cost |
 | --- | --- | --- | --- |
 | Chrome extension OAuth Client ID | Cloud Console → Credentials → Client A | `extension/manifest.json` → `oauth2.client_id` | Free |
-| Web application OAuth Client ID | Cloud Console → Credentials → Client B | `pwa/auth.js` → `CLIENT_ID` | Free |
+| Web application OAuth Client ID | Cloud Console → Credentials → Client B | `pwa/index.html` (`window.TAB_TOPICS_CLIENT_ID`) / `pwa/auth.js` | Free |
 | YouTube Data API key | Cloud Console → Credentials → API Key | Extension Settings → "YouTube Data API key" (syncs to PWA automatically) | Free (10,000 units/day) |
 | Extension ID | `chrome://extensions` | Cloud Console → Client A → Item ID | — |
 | GitHub Pages URL | GitHub repo → Settings → Pages | Cloud Console → Client B → Authorized JavaScript origins | Free (100 GB/mo bandwidth) |
