@@ -3,7 +3,7 @@
 
 import { chromeAdapter } from '../shared/store.js';
 import { performSync } from '../shared/sync-engine.js';
-import { getExtensionAuthToken } from '../shared/auth-extension.js';
+import { getExtensionAuthToken } from '../auth.js';
 
 const SYNC_ALARM_NAME = 'tab-topics-periodic-sync';
 const SYNC_INTERVAL_MINUTES = 2;

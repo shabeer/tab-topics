@@ -5,7 +5,7 @@
 import * as logic from '../shared/logic.js';
 import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 import { loadSyncMeta, saveSyncMeta, performSync } from '../shared/sync-engine.js';
-import { getExtensionAuthToken, removeCachedToken } from '../shared/auth-extension.js';
+import { getExtensionAuthToken, removeCachedToken } from '../auth.js';
 
 const QUEUE_LABELS = { to_be_ordered: 'To be ordered', ordered: 'Ordered', done: 'Done' };
 
