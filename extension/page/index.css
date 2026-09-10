@@ -133,6 +133,7 @@ button.linkish:hover { text-decoration: underline; }
 .entry-actions button { font-size: 11px; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); cursor: pointer; white-space: nowrap; }
 .entry-actions button:hover { border-color: var(--accent); color: var(--accent); }
 .entry-actions button.done-btn:hover { border-color: var(--green); color: var(--green); }
+.entry-actions button.open-del:hover { border-color: #dc2626; color: #dc2626; }
 .entry-actions button.del:hover { border-color: #dc2626; color: #dc2626; }
 
 .note-edit { margin-top: 8px; }

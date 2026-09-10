@@ -352,6 +352,11 @@ function buildEntryRow(entry, queue) {
     editingEntryId = editingEntryId === entry.id ? null : entry.id;
     render();
   }));
+  actions.append(mk('↗✕', 'Open URL and delete entry', 'open-del', async () => {
+    window.open(entry.url, '_blank');
+    logic.deleteEntry(state, entry.id);
+    await persistAndRender();
+  }));
   actions.append(mk('✕', 'Delete entry', 'del', async () => {
     if (window.confirm(`Delete "${entry.title}"?`)) {
       logic.deleteEntry(state, entry.id);

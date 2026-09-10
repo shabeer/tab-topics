@@ -296,6 +296,14 @@ function buildEntryCard(entry) {
     } catch {}
   }));
 
+  const openDelBtn = mkBtn('↗ Open & Delete', 'open-del-btn', async () => {
+    window.open(entry.url, '_blank');
+    logic.deleteEntry(state, entry.id);
+    await persistAndRender();
+  });
+  openDelBtn.title = 'Open URL and delete entry';
+  actions.append(openDelBtn);
+
   actions.append(mkBtn('✕ Delete', 'del-btn', async () => {
     if (window.confirm(`Delete "${entry.title}"?`)) {
       logic.deleteEntry(state, entry.id);

@@ -420,9 +420,13 @@ th { color: var(--muted); font-weight: 600; }
   border-color: var(--green);
 }
 
-.entry-actions button.del-btn {
+.entry-actions button.open-del-btn {
   color: var(--danger);
   margin-left: auto;
+}
+
+.entry-actions button.del-btn {
+  color: var(--danger);
 }
 
 .note-edit-box {
