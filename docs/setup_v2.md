@@ -137,11 +137,10 @@ permissions, plus the `oauth2` block:
 
 ### 3.1 Create or prepare the repository
 
-**Option A — Same repo:** Add a `pwa/` directory to this repository and
-configure GitHub Pages to serve from it.
+**Option A — Same repo (Recommended):** Keep the `pwa/` directory in this repository and deploy it to GitHub Pages using the included GitHub Actions workflow (`.github/workflows/deploy-pwa.yml`).
 
 **Option B — Separate repo:** Create a new GitHub repository (e.g.,
-`tab-topics-pwa`) and push the PWA files there. This keeps the extension and
+`tab-topics-pwa`) and push the PWA files to its root directory. This keeps the extension and
 PWA deployments independent.
 
 ### 3.2 PWA file structure
@@ -244,15 +243,62 @@ Update the fallback client ID in `getPwaAuthToken()` in `pwa/auth.js`:
 const cid = clientId || window.TAB_TOPICS_CLIENT_ID || '<Client ID from step 1.4 — Client B>';
 ```
 
-### 3.5 Deploy to GitHub Pages
+### 3.5 Deploy to GitHub Pages via GitHub Actions
 
-1. Push the `pwa/` directory to your GitHub repository.
-2. Go to the repo's **Settings → Pages**.
-3. Under **Source**, select the branch and folder:
-   - If the PWA is in the repo root: select the branch, folder `/`.
-   - If the PWA is in `pwa/`: select the branch, folder `/pwa`.
-4. Click **Save**. GitHub deploys the site within a minute.
-5. Your PWA is now live at `https://<username>.github.io/<repo>/`.
+GitHub Pages' branch-based deployment only allows selecting `/` (root) or `/docs` as the source folder. Because the PWA lives in `pwa/`, this repository uses a **GitHub Actions workflow** (`.github/workflows/deploy-pwa.yml`) to deploy the `pwa/` directory to GitHub Pages.
+
+1. In your GitHub repository, go to **Settings → Pages**.
+2. Under **Build and deployment → Source**, change the dropdown from **"Deploy from a branch"** to **"GitHub Actions"**.
+3. Push your repository to GitHub (or push any commit affecting `pwa/` or `.github/workflows/deploy-pwa.yml`).
+4. GitHub Actions runs the workflow automatically to publish the `pwa/` folder. You can monitor the deployment under the **Actions** tab.
+5. Once completed, your PWA is live at `https://<username>.github.io/<repo>/`.
+
+#### GitHub Actions Workflow Reference
+
+The included workflow file `.github/workflows/deploy-pwa.yml`:
+
+```yaml
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pwa/**'
+      - '.github/workflows/deploy-pwa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload PWA artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './pwa'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+```
 
 #### Verify HTTPS
 
