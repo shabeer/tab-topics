@@ -1,6 +1,6 @@
 # Tab Topics v2 — Cross-Device Sync Requirements
 
-**Status:** Draft — pending review before implementation
+**Status:** Implemented (v2 cross-device sync as-built, with deletion sync, bulk skip all tabs, open & delete action, and YouTube bulk topic determination)
 **Date:** 2026-09-10
 **Depends on:** v1 as-built (§7 of `requirements-review.md`) and v2 YouTube enrichment (§8)
 
@@ -42,23 +42,25 @@ suggest topics correctly regardless of which device saves the tab.
 - Gains an `oauth2` block in `manifest.json` with the Chrome-app OAuth client
   ID and `scopes: ["https://www.googleapis.com/auth/drive.appdata"]`.
 - Gains the `"identity"` permission (for `chrome.identity.getAuthToken`).
-- A new `shared/sync.js` module handles the pull-merge-push cycle.
+- `extension/auth.js` integrates Chrome identity authentication.
+- Shared sync modules in `shared/` (`sync.js`, `sync-engine.js`, `drive.js`)
+  handle 3-way merge, sync lifecycle orchestration, and Google Drive REST API calls.
 - The service worker triggers sync on: alarm interval, after local mutations
-  (debounced), and when the popup/manager opens.
+  (debounced), when the popup/manager opens, and when settings change.
 
 **Android PWA (new)**
 
-- A static web app (`pwa/`) reusing `shared/logic.js`, `shared/youtube.js`,
+- A static web app (`pwa/`) reusing the identical shared modules in `pwa/shared/`
+  (`logic.js`, `youtube.js`, `store.js`, `sync.js`, `sync-engine.js`, `drive.js`),
   and the manager UI from `extension/page/`.
 - Served over HTTPS from GitHub Pages (or equivalent).
-- Uses Google Identity Services (GIS) token client for OAuth — the
+- `pwa/auth.js` uses Google Identity Services (GIS) token client for OAuth — the
   `accounts.google.com/gsi/client` library runs in Android Chrome and returns
   an access token for Drive API calls.
-- Stores state locally in IndexedDB via a new `indexedDbAdapter` implementing
-  the same `get()`/`set()` interface as the existing `chromeAdapter` in
-  `shared/store.js`.
+- Stores state locally in IndexedDB via `pwa/idb-adapter.js` implementing
+  the same `get()`/`set()` interface as `chromeAdapter` in `shared/store.js`.
 - Declares a `share_target` in its web app manifest so it appears in Android's
-  system share sheet (see §4.5).
+  system share sheet (see §4.5 and §6.2).
 - Runs `display: "standalone"` so it opens full-screen like a native app.
 
 ### 3.2 Sync backend
@@ -104,10 +106,10 @@ Record types affected: topics, entries, rules, settings. These fields are
 transparent to the existing logic layer — `shared/logic.js` functions do not
 read them; the sync engine stamps them after each mutation.
 
-### 4.2 Tombstones
+### 4.2 Tombstones & Deletion Sync
 
 Deleting a topic, entry, or rule writes a tombstone record instead of removing
-it from the array:
+it completely from the storage array:
 
 ```
 { id, _deleted: true, deletedAt: <timestamp>, deviceId }
@@ -116,9 +118,20 @@ it from the array:
 Tombstones are retained for 30 days (configurable), then pruned. This prevents
 a delete on one device from being resurrected by a stale copy on the other.
 
-Existing deletion semantics are unchanged at the application layer: `deleteTopic`
-still requires a move target, `deleteEntry` still reindexes the queue. The sync
-layer intercepts and converts the removal into a tombstone before persisting.
+- **Query filtering:** All query and mutation functions in `shared/logic.js`
+  (`findEntryByUrl`, `topicCounts`, `entriesInQueue`, `searchEntries`,
+  `exportState`, `importState`) explicitly filter out tombstones via
+  `!isTombstone(item)` checks.
+- **Re-save resurrection guard:** When a previously deleted URL is re-saved via
+  `saveTab()`, any stale tombstone matching that URL is removed from
+  `state.entries` so the new entry is not masked.
+- **Topic ID normalization across devices:** When different devices initialize
+  topics independently, they may assign different UUIDs to topics with the same
+  name. `shared/sync.js` builds an ID remapping map across base, local, and
+  remote by matching topic names (case-insensitive) to canonical topic IDs. This
+  remapping is applied to `topicId` attributes across base, local, and remote
+  entries and rules *before* merging collections, ensuring cross-device tab
+  deletions and moves synchronize reliably.
 
 ### 4.3 Batch IDs for queue reorders
 
@@ -144,7 +157,7 @@ syncMeta: {
 
 All of `syncMeta` lives in local storage only; it is never uploaded to Drive.
 
-### 4.5 YouTube metadata in sync
+### 4.5 YouTube metadata in sync & bulk filing
 
 | Field | Synced? | Rationale |
 | --- | --- | --- |
@@ -152,6 +165,12 @@ All of `syncMeta` lives in local storage only; it is never uploaded to Drive.
 | `state.ytMeta` (cache) | No | Regenerable; each device maintains its own 500-item cache locally. Keeping it out of the Drive payload reduces file size and avoids stale-cache conflicts. |
 | `entry.yt` (stamps) | Yes | Embedded on the entry record. When desktop saves a YouTube video and stamps it, the stamp syncs to Android so channel name and publish date display without re-fetching. |
 | Rules (`ytChannelId`, `ytChannelName`, `ytChannel`) | Yes | Rules sync as regular records. A `ytChannelName` rule created on desktop will suggest the same topic when a matching video is shared from Android. |
+
+**Bulk filing enrichment:** Bulk saving in the popup pre-fetches YouTube metadata
+for all YouTube tabs before topic determination. The topic dropdowns
+asynchronously update with channel-based suggestions as metadata arrives (unless
+the user has manually chosen a topic). When saved, `entry.yt` stamps are attached
+immediately without requiring a post-save backfill pass.
 
 ---
 
@@ -170,10 +189,11 @@ sync():
 
 ### 5.2 Merge algorithm
 
-Record-level last-write-wins with deterministic tiebreaking:
+Record-level last-write-wins with deterministic tiebreaking and topic normalization:
 
-1. Build keyed maps of records from `base`, `local`, and `remote` (key = `id`).
-2. For each record present in any map:
+1. Deep-clone `base`, `local`, and `remote` state.
+2. Build keyed maps of records from `base`, `local`, and `remote` (key = `id`).
+3. For each record present in any map:
    - If only in `local` (new locally) → include.
    - If only in `remote` (new remotely) → include.
    - If in both `local` and `remote` and both changed vs. `base`:
@@ -181,12 +201,17 @@ Record-level last-write-wins with deterministic tiebreaking:
      tuple (lexicographic tiebreak on `deviceId`).
    - If only one side changed vs. `base` → take the changed version.
    - If neither changed → take as-is.
-3. Tombstoned records: a tombstone wins over a non-deleted version only if
+4. **Tombstone resolution:** a tombstone wins over a non-deleted version only if
    `deletedAt > updatedAt` of the live version.
-4. Batch integrity: if a batch's entries are split (some won locally, some
+5. **Canonical topic normalization:** Map any topic IDs from base, local, or remote
+   to their canonical topic ID by matching name (case-insensitive).
+6. **Invariant:** Ensure `NoTopic` exists and is placed at index 0 among active topics.
+7. **Pre-merge ID remapping:** Remap `topicId` in base, local, and remote rules and
+   entries before merging them so cross-device references remain valid.
+8. **Batch integrity:** if a batch's entries are split (some won locally, some
    remotely), the side with the higher batch timestamp wins for all entries in
    that batch.
-5. Queue positions: after merge, reindex all queues per topic to eliminate gaps
+9. **Queue positions:** after merge, reindex all queues per topic to eliminate gaps
    (reuses existing `reindex` logic).
 
 ### 5.3 Clock adjustment
@@ -216,14 +241,19 @@ Device clocks are not trusted for ordering. On each sync cycle:
 | Extension | Service worker startup | — |
 | Extension | `chrome.alarms` periodic | Every 2 minutes (configurable) |
 | Extension | After any local mutation (`saveState`) | 3-second debounce |
+| Extension | Settings change (API key, close-after-add) | Immediate via message `TRIGGER_SYNC` |
 | Extension | Popup or manager page opened | — |
 | PWA | App launch / page visibility change | — |
 | PWA | After any local mutation | 3-second debounce |
+| PWA | Settings change (API key, close-after-add) | Immediate sync |
 | PWA | Manual "Sync now" button | — |
+
+The extension popup also listens to `chrome.storage.onChanged` to refresh recents
+and search results in real time whenever background sync updates storage.
 
 ---
 
-## 6. Android PWA — functional requirements
+## 6. Android PWA & Extension — functional requirements
 
 ### 6.1 Core features (parity with desktop manager)
 
@@ -234,6 +264,11 @@ The PWA provides the full manager experience:
   be moved between queues using buttons (Order →, Done ✓, ← Back). Touch
   drag-and-drop is supported but buttons are the primary mobile interaction.
 - **Notes:** View and edit the plain-text note on any entry (inline editor).
+- **Entry actions:**
+  - Copy URL (`⧉`)
+  - Open URL in new tab and delete entry (`↗✕` on desktop, `↗ Open & Delete` on PWA)
+  - Edit note (`✎`)
+  - Delete entry (`✕` with confirmation)
 - **Rules:** View, create, edit, delete, toggle, and reorder all rule types
   including `ytChannelId`, `ytChannelName`, `ytChannel`, `domain`, and
   `urlPattern`.
@@ -287,7 +322,7 @@ for mobile:
 - **Queue columns:** Stack vertically as collapsible accordion sections, or
   render as three swipeable tabs (To be ordered / Ordered / Done).
 - **Touch targets:** Minimum 44×44px tap targets; adequate spacing for thumbs.
-- **Entry actions:** "Order →", "Done ✓", edit note (✎), and delete (✕)
+- **Entry actions:** "Order →", "Done ✓", edit note (✎), "↗ Open & Delete" (opens URL in a new tab and deletes the entry), and delete (✕)
   buttons are prominently visible on each card.
 
 ### 6.5 Offline behavior
@@ -298,6 +333,21 @@ The PWA works fully offline:
 - All reads and writes go to IndexedDB.
 - When the device comes back online, pending changes sync to Drive.
 - A visual indicator shows sync status (synced / syncing / offline / error).
+
+### 6.6 Bulk window filing (extension popup)
+
+The extension popup provides a bulk filing interface for filing all open tabs:
+
+- **Topic determination:** Evaluates URL, domain, and YouTube channel rules.
+  For YouTube video tabs, metadata is fetched asynchronously and suggested
+  topics update automatically as channel info arrives (unless user modified).
+- **Skip all tabs checkbox:** A "Skip all tabs" checkbox sets every tab's select
+  to "— skip —" (or restores suggested topics when unchecked). Manually setting
+  all rows to skip checks the box automatically.
+- **Immediate YouTube stamping:** Filed YouTube video entries receive their
+  `entry.yt` metadata stamps immediately at save time.
+- **Right-to-left order & auto-close:** Optional checkboxes for reverse tab strip
+  insertion and closing non-skipped tabs after filing.
 
 ---
 
@@ -409,43 +459,54 @@ video metadata, not user-specific data.)
 
 | Module | Location | Purpose |
 | --- | --- | --- |
-| `shared/sync.js` | Extension + PWA | Pure sync engine: pull, merge, push, tombstone handling, batch integrity, clock adjustment. No browser API dependencies — injectable adapters for Drive I/O and clock. |
-| `shared/drive.js` | Extension + PWA | Drive REST API wrapper: `downloadState()`, `uploadState()`, `getFileRevision()`. Accepts an access token; used by both the extension (token from `chrome.identity`) and the PWA (token from GIS). |
-| `shared/idb-adapter.js` | PWA only | IndexedDB storage adapter implementing the `get()`/`set()` interface from `shared/store.js`. |
+| `extension/auth.js` | Extension root | Chrome extension OAuth integration using `chrome.identity.getAuthToken` with automatic token caching and silent refresh. |
+| `pwa/auth.js` | PWA root | Google Identity Services (GIS) token client initialization, token lifecycle, and sign-in/out. |
+| `pwa/idb-adapter.js` | PWA root | IndexedDB storage adapter implementing the `get()`/`set()` interface from `shared/store.js`. |
+| `shared/sync.js` | Extension + PWA | Pure 3-way merge engine: collection merge, tombstone pruning, canonical topic ID normalization, queue reindexing, and clock adjustment. Pure JS with zero browser dependencies. |
+| `shared/sync-engine.js` | Extension + PWA | High-level sync lifecycle orchestration: pull-merge-push cycle, periodic alarms, debounce timers, settings sync triggers, and sync status state. |
+| `shared/drive.js` | Extension + PWA | Drive REST API client: `downloadState()`, `uploadState()`, `findOrCreateStateFile()`, revision tracking. Used by both extension and PWA. |
 | `pwa/manifest.webmanifest` | PWA | Web app manifest with `share_target`, icons, `display: standalone`, app name. |
 | `pwa/sw.js` | PWA | Service worker for offline caching of static assets. |
-| `pwa/index.html` | PWA | Manager UI, adapted for responsive mobile layout. |
-| `pwa/share-receive.html` | PWA | Share target receiver: topic picker for incoming shared URLs. |
-| `pwa/auth.js` | PWA | GIS token client initialization, token lifecycle, sign-in/out. |
+| `pwa/index.html` / `index.js` | PWA | Full responsive manager UI adapted for mobile, with queue buttons and "Open & Delete" action. |
+| `pwa/share-receive.html` / `share-receive.js` | PWA | Share target receiver: topic picker for incoming shared URLs with YouTube metadata enrichment. |
+
+*Note on symmetry:* `extension/shared/` and `pwa/shared/` contain identical files (`logic.js`, `store.js`, `sync.js`, `sync-engine.js`, `drive.js`, `youtube.js`), keeping shared business and sync logic perfectly aligned across platforms.
 
 ---
 
 ## 10. Testing strategy
 
-### 10.1 Unit tests (Node, `node:test`)
+### 10.1 Automated unit tests (Node, `node:test`)
 
-- **Merge algorithm:** Both-dirty conflict (LWW picks newer), delete-vs-edit
-  (tombstone wins when newer), concurrent reorder (batch integrity), new on
-  both sides (union), no-change (identity).
-- **Clock adjustment:** Simulated offset produces correct `updatedAt` values.
-- **Tombstone pruning:** Records older than 30 days are removed.
-- **Drive adapter:** Mock HTTP responses for download, upload, revision check,
-  and error paths (401, 403, 409, network failure).
+74 tests across logic and sync test suites (`npm test`):
 
-### 10.2 Integration tests
+- **Logic layer (`test/logic.test.js` — 53 tests):**
+  - Topic CRUD, NoTopic invariant, queue operations, reordering, duplicate handling.
+  - Domain, URL pattern, and YouTube channel rules (`ytChannelId`, `ytChannelName`, `ytChannel`).
+  - YouTube video URL parsing, API caching, tombstone and error handling.
+  - YouTube metadata topic determination during bulk filing and immediate `entry.yt` stamping.
+  - Bulk filing skip semantics ("— skip —" values and "Skip all tabs" toggle).
+  - Search across notes, titles, URLs, topics, and YouTube channel names.
+  - Export masking and import merge with local-wins conflicts and tombstone hygiene.
+- **Sync primitives & helpers (`test/sync.test.js` — 6 tests):**
+  - Device ID generation, clock offset adjustment, record stamping, tombstone creation and 30-day pruning, LWW comparisons with deterministic tiebreaking.
+- **3-way collection merge (`test/sync.test.js` — 4 tests):**
+  - Non-conflicting additions, concurrent edits on same record with LWW, tombstone deletion vs older edit, resurrection when edit is newer than deletion tombstone.
+- **Full state 3-way merge (`test/sync.test.js` — 3 tests):**
+  - NoTopic topic invariant preservation at index 0, sequential queue reindexing across queues, YouTube metadata stamp preservation and settings sync.
+- **Google Drive REST client (`test/sync.test.js` — 4 tests):**
+  - Finding and creating state file in `appDataFolder`, download/upload payloads, HTTP error translation into `DriveError`.
+- **High-level sync engine (`test/sync.test.js` — 4 tests):**
+  - Disabled status when sync off, complete sync cycle with memory adapter, cross-device tab deletion sync (verifying tab deleted on device A disappears on device B), canonical topic ID normalization across devices with independently generated IDs.
 
-- End-to-end sync cycle: save on device A → appears on device B within one
-  cycle.
-- Concurrent edits: edit same note on both → LWW winner with newer stamp.
-- Offline resilience: mutation while offline → syncs after reconnect.
+### 10.2 Integration & Manual verification
 
-### 10.3 Manual verification
-
-- Share Target on Android: share a YouTube video → topic picker with
-  channel-based suggestion → verify entry appears on desktop after sync.
-- PWA install flow: "Add to Home screen" → app opens standalone → share target
-  registered in system share sheet.
-- OAuth consent flow on both clients.
+- **Cross-device tab deletion sync:** Delete tab entry on mobile → verify entry is removed on desktop after sync cycle.
+- **Bulk window filing:** Bulk filing with YouTube tabs resolves channel rules and sets suggested topics asynchronously; "Skip all tabs" checkbox skips all tabs at once.
+- **Open & Delete:** Click `↗✕` on desktop or `↗ Open & Delete` on mobile → opens page in new tab and deletes entry from queue.
+- **Share Target on Android:** Share YouTube video → topic picker with channel-based suggestion → entry appears on desktop after sync.
+- **PWA install flow:** "Add to Home screen" → standalone app → share target registered.
+- **OAuth consent flow:** Google sign-in on extension and PWA.
 
 ---
 

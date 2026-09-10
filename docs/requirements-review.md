@@ -233,3 +233,18 @@ The Data API was chosen: it is the only source that returns the stable `UC…` c
 - Resolving `youtube.com/@handle` *channel* URLs to `UC…` ids (needs a second `channels.list` call); id/name rules therefore apply to watch URLs and stamped entries only.
 - Key-validation / "test key" UI; quota-exceeded feedback beyond console warnings and skipped enrichment.
 - Publish-date-based rules (e.g. older/newer than N days) — the date is stored, the rule type is not built.
+
+## 9. v2 delta — Cross-device sync & enhancements (September 2026)
+
+Implements bidirectional synchronization between desktop Chrome (extension) and Android Chrome (PWA companion app), cross-device deletion sync, bulk filing enhancements, and entry lifecycle actions.
+
+### As built
+
+- **Google Drive `appDataFolder` sync:** Zero-cost backend using user's private application data folder on Google Drive. The desktop extension uses `chrome.identity.getAuthToken` (`extension/auth.js`) and the PWA uses Google Identity Services token client (`pwa/auth.js`).
+- **3-Way merge engine (`shared/sync.js` & `shared/sync-engine.js`):** Pure merge engine resolving record conflicts with Last-Write-Wins and deterministic `deviceId` tiebreaking, clock offset adjustments against Drive server time, batch integrity for queue reordering, and periodic background sync via `chrome.alarms` every 2 minutes.
+- **Cross-device tab deletion sync:** Deletions generate tombstone records (`{ id, _deleted: true, deletedAt, deviceId }`) retained for 30 days. Query functions throughout `shared/logic.js` filter tombstones. Stale tombstones are removed on URL re-save. Topic IDs across base, local, and remote are normalized to canonical topic IDs by name before merging rules and entries, guaranteeing that tab deletions and queue moves sync cleanly across devices with different generated IDs.
+- **YouTube metadata in bulk saving:** The popup bulk filing UI pre-fetches YouTube metadata for all open video tabs. Topic dropdowns asynchronously update with channel rule suggestions as metadata arrives (unless user modified), and `entry.yt` stamps are attached immediately at save time.
+- **Bulk "Skip all tabs" checkbox:** Added to the popup bulk filing interface to instantly skip all open tabs, with bidirectional sync between row selects and the checkbox.
+- **Open URL and delete entry button:** Added `↗✕` to the extension manager and `↗ Open & Delete` to the PWA, allowing one-click opening of an entry's URL in a new tab while deleting the entry from the queue.
+- **Shared code symmetry:** Clean modular separation with `extension/shared/` and `pwa/shared/` containing the exact same 6 modules (`logic.js`, `store.js`, `sync.js`, `sync-engine.js`, `drive.js`, `youtube.js`).
+- **Testing:** 74 tests across 5 test suites (`test/logic.test.js` and `test/sync.test.js`), covering the logic layer, sync primitives, 3-way collection merge, full state merge, Drive REST client, and high-level sync engine.

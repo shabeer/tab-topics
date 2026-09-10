@@ -151,25 +151,30 @@ The PWA directory contains:
 ```
 pwa/
   index.html              Manager UI (adapted from extension/page/)
+  index.js                Manager application logic
+  index.css               Manager responsive styles
   share-receive.html      Share target receiver page
+  share-receive.js        Share target handling & enrichment
+  idb-adapter.js          IndexedDB storage adapter
+  auth.js                 Google Identity Services integration
   manifest.webmanifest    Web app manifest (name, icons, share_target, display)
   sw.js                   Service worker for offline caching
-  auth.js                 Google Identity Services integration
   icons/
     icon-192.png          Home screen icon
     icon-512.png          Splash screen icon
-    icon-192-maskable.png Adaptive icon (Android)
-    icon-512-maskable.png Adaptive icon (Android)
   shared/
-    logic.js              ← copied from extension/shared/logic.js
-    youtube.js            ← copied from extension/shared/youtube.js
-    sync.js               ← shared sync engine (new)
-    drive.js              ← Drive API wrapper (new)
-    store.js              ← extended with indexedDbAdapter (new)
+    logic.js              ← identical to extension/shared/logic.js
+    youtube.js            ← identical to extension/shared/youtube.js
+    store.js              ← identical to extension/shared/store.js
+    sync.js               ← identical to extension/shared/sync.js
+    sync-engine.js        ← identical to extension/shared/sync-engine.js
+    drive.js              ← identical to extension/shared/drive.js
 ```
 
-The `shared/` modules are identical between the extension and the PWA. During
-development, keep them in sync manually or use a symlink / build script.
+The six modules in `shared/` are completely identical between `extension/shared/`
+and `pwa/shared/`. Client-specific authentication lives at each client's root
+(`extension/auth.js` for Chrome Identity and `pwa/auth.js` for GIS). During
+development, keep the shared files in sync.
 
 ### 3.3 Configure the PWA manifest
 

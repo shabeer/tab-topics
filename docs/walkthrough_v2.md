@@ -47,10 +47,11 @@ network connection. Changes sync to Drive within a few seconds when online.
 
 ---
 
-## 2. Saving a tab on desktop (unchanged from v1/v2)
+## 2. Saving a tab on desktop (and Bulk Filing)
 
-The desktop experience is identical to what you already know:
+The desktop experience offers both quick single-tab saving and bulk window filing:
 
+### Single tab save
 1. Press **⌥⇧U** (macOS) or **Alt+Shift+U** (Windows/Linux).
 2. The quick picker opens. If a rule matches the current tab's URL, its topic
    is pre-selected. For YouTube videos, channel-based rules
@@ -58,8 +59,23 @@ The desktop experience is identical to what you already know:
 3. Confirm the topic. The entry lands in `to_be_ordered`.
 4. Within seconds, the entry syncs to Drive and becomes visible on your phone.
 
-**Notes, queue moves, and all other desktop actions** work the same way. Each
-change is saved locally first, then synced.
+### Bulk filing open tabs
+1. Open the popup (toolbar icon or **⇧⌘Space** / **Ctrl+Shift+Space**).
+2. Click **File all tabs in this window…**.
+3. Tab Topics inspects all open tabs and evaluates topic rules:
+   - For YouTube tabs, video metadata is fetched in the background so
+     `ytChannelId` and `ytChannelName` rules pre-select the appropriate topics.
+   - The dropdowns update asynchronously as channel metadata arrives.
+   - You can check **Skip all tabs** to immediately mark all tabs as `— skip —`,
+     or uncheck it to restore suggestions.
+   - Optional checkboxes let you reverse queue insertion order (right-to-left)
+     or automatically close filed tabs.
+4. Click **Apply**. Entries are saved with YouTube metadata stamps attached,
+   synced to Drive, and filed into their respective queues.
+
+**Notes, queue moves, and all other desktop actions** work seamlessly. In the
+manager, you can also use **↗✕** on any entry card to open the URL in a new
+tab and delete the entry in one step. Each change is saved locally first, then synced.
 
 ---
 
@@ -136,6 +152,9 @@ Everything the desktop manager does, adapted for a phone screen:
 - **Move entries between queues** — tap "Order →" to move an entry from
   `to_be_ordered` to `ordered`; tap "Done ✓" to move it to `done`; tap
   "← Back" to reverse.
+- **Open and delete in one tap** — tap "↗ Open & Delete" (or `↗✕` on desktop)
+  to open the tab URL in a new browser tab and immediately remove the entry from
+  the queue.
 - **Edit notes** — tap the ✎ button on any entry to open the note editor.
   The on-screen keyboard appears; type or edit the note and tap Save.
 - **Create and manage rules** — the Rules panel lets you add, edit, toggle,
@@ -180,11 +199,14 @@ the conflict automatically:
 
 ### Example: delete on one device, edit on another
 
-1. You delete an entry on your phone.
+1. You delete an entry on your phone (either via Delete or Open & Delete).
 2. Before it syncs, you edit the same entry's note on your desktop.
 3. The delete is stored as a tombstone with a `deletedAt` timestamp. If the
    tombstone is newer than the edit, the entry stays deleted. If the edit is
    newer, the entry survives.
+4. When synced across devices, topic IDs are normalized by name before merging
+   entries and rules, ensuring deletions sync reliably even if topics were
+   initialized with different IDs on different devices.
 
 ### Example: both devices reorder the same queue
 
@@ -205,7 +227,7 @@ the conflict automatically:
 
 ---
 
-## 6. Sync status indicators
+## 6. Sync status indicators & background triggers
 
 Both clients show a small indicator so you know whether your data is current:
 
@@ -215,6 +237,17 @@ Both clients show a small indicator so you know whether your data is current:
 | ↻ Syncing | A sync cycle is in progress. |
 | ⚠ Offline | No network connection. Changes are saved locally and will sync when online. |
 | ✕ Sync error | The last sync attempt failed (auth expired, Drive quota, network). Tap for details. |
+
+### Background triggers
+
+Sync runs automatically behind the scenes:
+- **Periodic sync:** Runs every 2 minutes via `chrome.alarms` on the desktop extension.
+- **Debounced mutation sync:** Runs 3 seconds after any local edit or save.
+- **Immediate settings sync:** Changing settings (such as the YouTube API key or
+  close-after-add preference) triggers a sync immediately.
+- **Live UI refresh:** The extension popup listens to storage changes and
+  re-renders recents and search results in real time if background sync pulls
+  fresh remote changes.
 
 ---
 

@@ -29,10 +29,11 @@ and JSON export/import. Built to the revised specification in
   - ⧉ button on each entry (and search result) copies its URL to the clipboard
     — the way to grab the address of a `file://` entry, which Chrome refuses to
     open from an extension page unless "Allow access to file URLs" is enabled
+  - ↗✕ button on each entry opens the tab URL in a new browser tab and deletes the entry
   - Drag entries between queues, or drag onto a sidebar topic to move cross-topic
   - Order →, Done ✓ buttons
   - Rules tab (try domain rule example.com → News, then reload example.com and see the "suggested" badge in the picker; drag and drop rows to reorder rule priority) 
-  - Settings → Export
+  - Settings → Export / Sync with Google Drive
 
 - **Rule-based topic suggestions** — domain, URL-pattern (`*` wildcards),
   YouTube-channel-handle, YouTube-channel-id, and YouTube-channel-name rules
@@ -51,13 +52,20 @@ and JSON export/import. Built to the revised specification in
   key, everything works exactly as before on URL rules alone.
 - **Bulk filing** — "File all tabs in this window" in the popup: one topic
   select per tab (rules pre-select matching topics; unmatched tabs default to
-  **NoTopic**). Tabs marked "— skip —" are excluded entirely — no entry, no close.
+  **NoTopic**; YouTube tabs pre-fetch metadata to match channel rules).
+  Tabs marked "— skip —" are excluded entirely — no entry, no close.
+  A "Skip all tabs" checkbox quickly marks all open tabs to be skipped (or
+  uncheck to restore rule suggestions).
   An unchecked-by-default "Close tabs after filing" checkbox auto-closes all
   filed (non-skipped) tabs when checked. A separate manual "Close filed tabs"
   button remains available when the auto-close checkbox is off. An unchecked-by-default
   "Insert in right-to-left tab order" checkbox controls the order entries land in
   their queues: unchecked (default) files the tabs left to right, checked files
   right to left so the rightmost tab gets the top position in its queue.
+- **Cross-device sync & Android PWA** — sync your topics, queues, notes, rules, and
+  YouTube settings across devices via your private Google Drive (`appDataFolder`).
+  Install the companion PWA on Android to save tabs directly via the system share
+  sheet, manage queues on the go, and use "↗ Open & Delete" for one-tap consuming.
 - **NoTopic catch-all** — a reserved topic at the top of the topics list.
   Bulk filing and the quick picker default to it when no rule matches. If deleted,
   it is silently recreated at the top on next load.
@@ -96,17 +104,28 @@ Reload the extension in `chrome://extensions` after editing files.
 
 ```
 extension/
-  manifest.json               MV3 manifest (permissions: tabs, storage, favicon;
-                              host permissions: googleapis.com for YouTube enrichment)
-  background/service-worker.js  opens quick-capture windows on shortcuts
-  shared/logic.js             pure data logic (queues, rules, search, import)
-  shared/youtube.js           YouTube Data API fetch + metadata cache orchestration
-  shared/store.js             chrome.storage.local persistence (+ memory adapter for tests)
-  popup/                      toolbar popup: quick save, bulk filing, search, recents
-  quick/                      shortcut windows: topic picker, note editor
-  page/                       full-page manager: topics, 3 queues, drag & drop, rules, settings
-test/logic.test.js            node:test suite for the logic layer
-tools/                        icon generator, build validator
+  manifest.json                 MV3 manifest (permissions: tabs, storage, favicon, identity, alarms)
+  auth.js                       Chrome identity OAuth integration
+  background/service-worker.js  background sync alarm + shortcut windows
+  shared/logic.js               pure data logic (queues, rules, search, import)
+  shared/youtube.js             YouTube Data API fetch + metadata cache orchestration
+  shared/store.js               chrome.storage.local persistence (+ memory adapter for tests)
+  shared/sync.js                pure 3-way merge engine + tombstone management
+  shared/sync-engine.js         sync lifecycle orchestration (extension & PWA)
+  shared/drive.js               Google Drive appDataFolder REST API wrapper
+  popup/                        toolbar popup: quick save, bulk filing, skip-all, search, recents
+  quick/                        shortcut windows: topic picker, note editor
+  page/                         full-page manager: topics, 3 queues, open & delete, rules, sync settings
+pwa/                            Android companion Progressive Web App
+  auth.js                       Google Identity Services OAuth token client
+  idb-adapter.js                IndexedDB persistence adapter
+  share-receive.html / .js      Web Share Target receiver with YouTube enrichment
+  index.html / .js / .css       full mobile manager UI
+  sw.js                         offline service worker
+  shared/                       identical shared modules matching extension/shared/
+test/logic.test.js              node:test suite for the logic layer
+test/sync.test.js               node:test suite for the sync layer
+tools/                          icon generator, build validator
 ```
 
 ## Verification & test log (from the build session)
@@ -114,41 +133,36 @@ tools/                        icon generator, build validator
 This section records what was verified while building the extension, what
 could not be machine-tested and why, and the short checklist to confirm by
 hand. The spec-side view of the same information lives in
-[`docs/requirements-review.md`](docs/requirements-review.md) §7.
+[`docs/requirements-review.md`](docs/requirements-review.md) §7, §8, and §9.
 
 ### Automated verification — all green
 
-- **29/29 unit tests pass** (`npm test`, Node's built-in runner). Coverage:
-  topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
-  seeding, migration (recreated at top if missing), `ensureTopic` find-or-create,
-  save-to-`to_be_ordered`, duplicate handling (note kept, queue reset even
-  from `done`), all queue moves, reordering with clamped positions,
-  domain/URL-pattern/YouTube-channel rule matching, first-enabled-rule-wins,
-  disabled rules, search across notes/title/URL/topic, export/import merge
-  with local-wins conflicts, and the storage adapters.
+- **74/74 unit tests pass** (`npm test`, Node's built-in runner across 5 test suites):
+  - **53 logic tests (`test/logic.test.js`)**: Topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
+    seeding, migration, `ensureTopic` find-or-create, save-to-`to_be_ordered`, duplicate handling, queue moves,
+    reordering with clamped positions, domain/URL-pattern/YouTube-channel rule matching, first-enabled-rule-wins,
+    disabled rules, search across notes/title/URL/topic/channel, export/import merge with local-wins conflicts,
+    storage adapters, YouTube video-URL parsing, `ytChannelId`/`ytChannelName` rule semantics, `ensureYtMeta`
+    caching/tombstone/error behavior, header-based API key transport, stamping/backfill, YouTube bulk topic determination,
+    and bulk skip all tabs.
+  - **21 sync tests (`test/sync.test.js`)**: Unique device ID generation, Drive server clock offset calculation,
+    record stamping, tombstone creation and 30-day pruning, LWW comparisons with deterministic tiebreaking,
+    3-way collection merge with concurrent edits, tombstone deletion vs edit, resurrection, full state merge
+    with NoTopic invariant preservation, sequential queue reindexing across queues, settings sync, Google Drive
+    REST client file creation/download/upload/error handling, full sync cycle, tab deletion sync across devices,
+    and canonical topic ID normalization across devices.
 - **`npm run build` validates**: MV3 manifest parses, every manifest-referenced
   asset exists, all JS files parse as ES modules, every HTML-referenced local
   asset resolves, shared modules import cleanly and behave.
 - Icons are generated dependency-free by `npm run icons`.
 
-### v2 session — YouTube enrichment
+### v2 session — YouTube enrichment & Cross-Device Sync
 
-- **51/51 unit tests pass** (`npm test`): the 28 v1 tests plus 23 covering
-  video-URL shape parsing (`/watch`, `youtu.be`, `/shorts`, `/live`,
-  `/embed`, music/m hosts), `ytChannelId`/`ytChannelName` rule semantics and
-  validation, handle rules matching through fetched metadata, `ensureYtMeta`
-  caching/tombstone/error behavior (injected fetch, no network; key sent via
-  `X-Goog-Api-Key` header), entry stamping + bulk backfill, export/import key
-  masking and hygiene, the `loadState` migration for pre-v2 states, and
-  channel-name search.
-- **`npm run build` validates** with the new `shared/youtube.js` module and
-  the `host_permissions` entry.
-- To verify by hand: reload the extension (Chrome will show the new
-  "read and change your data on www.googleapis.com" permission), save a
-  `youtu.be/…` link without a key (v1 behavior, no enrichment), then paste a
-  Data API key in the manager's Settings and save the link again — the entry
-  subtitle shows the channel and publish date, and a `ytChannelName` rule for
-  that channel pre-selects its topic on the next save.
+- **Enrichment & Sync**: YouTube metadata fetched via Data API v3, channel-based rule classification,
+  and bidirectional cross-device sync between Chrome extension and Android PWA companion via Google Drive `appDataFolder`.
+- **Deletion sync**: Deletions recorded as tombstones and synced across devices with canonical topic ID remapping.
+- **Bulk filing**: Pre-fetches YouTube metadata to determine topics automatically, with "Skip all tabs" quick toggle.
+- **Open & Delete**: One-click `↗✕` / `↗ Open & Delete` action opens the tab and removes it from the queue.
 
 ### Verified live in Chrome (v152, macOS)
 
@@ -227,7 +241,6 @@ an extension defect. The chords are the one item to confirm by hand:
 - Keyboard bindings live in Chrome, so they cannot be *applied* from an import
   file; the export includes a reference copy of the manifest shortcuts, but
   changing actual bindings is done at `chrome://extensions/shortcuts`.
-- Data is local to this browser profile (`chrome.storage.local`); no sync.
-- Concurrent edits from two extension surfaces at once (e.g. popup and manager)
-  are last-write-wins on the whole state — fine for a single user, noted for
-  future improvement.
+- Data is stored locally first (`chrome.storage.local` on desktop, `IndexedDB` on PWA)
+  and synced to Google Drive when sync is enabled; offline edits accumulate and sync
+  automatically when reconnected.
