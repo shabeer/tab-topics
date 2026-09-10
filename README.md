@@ -1,252 +1,80 @@
-# Tab Topics — Chrome extension
+# Tab Topics — Chrome Extension & Companion PWA
 
-A Chrome (Manifest V3) extension that saves open tabs as persistent entries,
-files them under user-defined topics through three per-topic queues
-(`to_be_ordered` → `ordered` → `done`), and supports per-entry notes, search,
-and JSON export/import. Built to the revised specification in
-[`docs/requirements-review.md`](docs/requirements-review.md).
+A Chrome (Manifest V3) extension and companion Android Progressive Web App (PWA) that saves tabs as persistent entries, organizes them into user-defined topics through a three-stage queue system (`to_be_ordered` → `ordered` → `done`), enriches YouTube videos with channel and publish-date metadata, and synchronizes state across devices using Google Drive (`appDataFolder`).
 
-## Features
+---
 
-- **Save current tab to a topic** — everything lands in the topic's
-  `to_be_ordered` queue; you move it to `ordered` or `done` manually
-  (buttons or drag-and-drop in the manager). In the manager, you can also
-  drag an entry card from any queue column and drop it onto a topic in the
-  sidebar to move it to that topic's `to_be_ordered` queue.
-- **Keyboard shortcuts** (macOS chords — note that manifest "Ctrl" maps to ⌘ Command on Mac)
-  - `⌥⇧U` (default) — quick picker: filter topics by typing, pick with ↑↓ + Enter
-    or number keys, optional "close tab after adding".
-  - `⌥⇧N` — add/edit the note on the current tab (files the tab first if it
-    isn't saved yet). "Close tab after saving" checkbox, unchecked by default.
-  - `⇧⌘Space` — open popup: quick Add, "File all tabs in this window", search
-  - On Windows/Linux the defaults are `Alt+Shift+U` / `Alt+Shift+N` /
-    `Ctrl+Shift+Space`. All bindings are suggestions; customize them at
-    `chrome://extensions/shortcuts`.
-- **Manager** (toolbar icon → Manager ↗): 
-  - Three queue columns laid out 40% : 40% : 20% of the width
-    (to be ordered : ordered : done); long titles and notes are truncated with
-    an ellipsis and shown in full on hover
-  - **Sort YouTube videos by published date** — every queue column has a `Sort YT ↓` / `Sort YT ↑` button
-    that moves dated YouTube videos to the top sorted by published date (newest-first or oldest-first,
-    toggling on click) while preserving the relative ordering of all undated tabs
-  - ⧉ button on each entry (and search result) copies its URL to the clipboard
-    — the way to grab the address of a `file://` entry, which Chrome refuses to
-    open from an extension page unless "Allow access to file URLs" is enabled
-  - ↗✕ button on each entry opens the tab URL in a new browser tab and deletes the entry
-  - Drag entries between queues, or drag onto a sidebar topic to move cross-topic
-  - Order →, Done ✓ buttons
-  - Rules tab (try domain rule example.com → News, then reload example.com and see the "suggested" badge in the picker; drag and drop rows to reorder rule priority) 
-  - Settings → Export / Sync with Google Drive
+## Key Features
 
-- **Rule-based topic suggestions** — domain, URL-pattern (`*` wildcards),
-  YouTube-channel-handle, YouTube-channel-id, and YouTube-channel-name rules
-  pre-select a topic in the quick picker and bulk filing. Drag-and-drop
-  reordering in the manager sets evaluation priority (first enabled match
-  wins). If no rules match, **NoTopic** is pre-selected. In the save tab
-  popup, simply pressing Enter saves to the pre-selected topic (manual
-  approval).
-- **YouTube video enrichment** — for `/watch?v=…`, `youtu.be/…`, `/shorts/…`,
-  `/live/…`, and `/embed/…` links, the extension fetches the video's publish
-  date, channel name, and channel id once (YouTube Data API v3, cached per
-  video) and stamps them on the entry. For tabs of YouTube video links, domain
-  names are omitted in favor of a clickable link directly to the YouTube channel.
-  Channel-id and channel-name rules can classify watch URLs, recents/manager/PWA
-  show the clickable channel link and publish date, and search covers the channel
-  name. Requires a free Data API key pasted into the manager's Settings (included
-  in export JSON in masked form). Without a key, everything works exactly as before
-  on URL rules alone.
-- **Bulk filing** — "File all tabs in this window" in the popup: one topic
-  select per tab (rules pre-select matching topics; unmatched tabs default to
-  **NoTopic**; YouTube tabs pre-fetch metadata to match channel rules).
-  Tabs marked "— skip —" are excluded entirely — no entry, no close.
-  A "Skip all tabs" checkbox quickly marks all open tabs to be skipped (or
-  uncheck to restore rule suggestions).
-  An unchecked-by-default "Close tabs after filing" checkbox auto-closes all
-  filed (non-skipped) tabs when checked. A separate manual "Close filed tabs"
-  button remains available when the auto-close checkbox is off. An unchecked-by-default
-  "Insert in right-to-left tab order" checkbox controls the order entries land in
-  their queues: unchecked (default) files the tabs left to right, checked files
-  right to left so the rightmost tab gets the top position in its queue.
-- **Cross-device sync & Android PWA** — sync your topics, queues, notes, rules, and
-  YouTube settings across devices via your private Google Drive (`appDataFolder`).
-  Install the companion PWA on Android to save tabs directly via the system share
-  sheet, manage queues on the go, and use "↗ Open & Delete" for one-tap consuming.
-- **NoTopic catch-all** — a reserved topic at the top of the topics list.
-  Bulk filing and the quick picker default to it when no rule matches. If deleted,
-  it is silently recreated at the top on next load.
-- **Notes** — one editable plain-text note per entry. You can write/edit notes
-  inline in the full-page manager (with ✎ button) or via the `⌥⇧N` quick-capture
-  window (which lets you choose a topic first if the tab isn't saved yet, and
-  includes an optional "Close tab after saving" checkbox).
-- **Search** — live search facility available in both the popup and manager page.
-  Searches across custom notes, tab titles, URLs, and topic names (newest first).
-- **Export / Import** — export all plugin data (topics, entries with notes/queues/positions,
-  rules, settings) to a single JSON file. The file also embeds a reference copy of the
-  keyboard shortcuts (read from the manifest); importing ignores it, since Chrome owns the
-  live bindings. Importing merges topics by name, remaps IDs, deduplicates rules, keeps
-  local notes on same-URL conflicts, and reports summary stats.
-- **Persistent** — entries live in `chrome.storage.local` and survive tab
-  closes and browser restarts. Closing a tab never deletes its entry.
+- **Topic & Three-Queue Organization**
+  - Save tabs into custom topics with a 3-stage queue workflow: `to_be_ordered` (inbox/unprioritized) → `ordered` (prioritized backlog) → `done` (completed/archive).
+  - Move entries between queues manually using action buttons (`Order →`, `Done ✓`, `← Back`) or drag-and-drop within the full-page manager.
+  - Drag an entry from any queue column and drop it onto a topic in the sidebar to move it cross-topic directly into `to_be_ordered`.
 
-## Install (unpacked, developer mode)
+- **Keyboard Shortcuts** (macOS defaults shown; customizable at `chrome://extensions/shortcuts`):
+  - `⌥⇧U` (`Alt+Shift+U` on Windows/Linux) — Quick Topic Picker: filter topics by typing, select with `↑`/`↓` + `Enter` or number keys; optional "Close tab after adding".
+  - `⌥⇧N` (`Alt+Shift+N` on Windows/Linux) — Note Editor: add/edit notes for the active tab (automatically prompts to file the tab if unsaved); includes an optional "Close tab after saving" checkbox.
+  - `⇧⌘Space` (`Ctrl+Shift+Space` on Windows/Linux) — Quick Popup: single-click save, bulk filing, live search, and recents list.
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode** (top right).
-3. Click **Load unpacked** and select the `extension/` directory of this repo.
+- **Full-Page Manager** (`Manager ↗` from toolbar popup):
+  - 3-column queue layout proportioned at 40% : 40% : 20% (`to_be_ordered` : `ordered` : `done`) with truncated titles and full-text hover tooltips.
+  - **Sort YouTube videos by published date**: Toggle `Sort YT ↓` / `Sort YT ↑` on any queue to move dated YouTube videos to the top sorted by published date (newest or oldest first) while preserving relative ordering for undated tabs.
+  - **One-click Open & Delete** (`↗✕` on desktop / `↗ Open & Delete` on mobile): Opens the URL in a new browser tab and immediately removes it from the queue.
+  - **Copy URL** (`⧉`): Copies the tab URL to clipboard (useful for `file://` URLs where direct opening from extension pages is restricted by Chrome).
+  - Inline note editing with quick `✎` button.
+  - Rules management tab with drag-and-drop rule priority reordering.
+  - Settings panel for Google Drive Sync configuration, YouTube API key management, and JSON Export/Import.
 
-## Development
+- **Rule-Based Topic Classification & Suggestions**:
+  - Automatically suggests topics using user-defined rules: domain matching, URL pattern wildcards (`*`), YouTube channel handle (`@handle`), YouTube channel ID (`UC...`), and YouTube channel name.
+  - First enabled matching rule in list order wins (user-defined priority).
+  - Manual approval workflow: suggested topics are pre-selected in save popups and bulk filing, allowing instant confirmation by pressing `Enter` or manual override.
+  - Reserved **NoTopic** catch-all topic is pre-selected when no rule matches.
 
-```bash
-npm test      # unit tests for the logic/storage layer (node:test)
-npm run build # validation: manifest, JS syntax, asset references
-npm run icons # regenerate extension/icons/*.png (pure Node, no deps)
-```
+- **YouTube Video Enrichment**:
+  - Automatically fetches video publish date, channel name, channel ID, and custom handle for supported YouTube URLs (`/watch?v=...`, `youtu.be/...`, `/shorts/...`, `/live/...`, `/embed/...`) via YouTube Data API v3 (cached per video ID).
+  - Shows clickable links directly to the YouTube channel instead of generic domain names.
+  - Displays formatted publish dates across manager cards, recents list, and PWA.
+  - Channel name is fully searchable in live search queries.
 
-No build step or bundler is needed — the extension ships plain ES modules.
-Reload the extension in `chrome://extensions` after editing files.
+- **Bulk Tab Filing**:
+  - "File all tabs in this window" bulk interface in the extension popup.
+  - Rules pre-select matching topics; unmatched tabs default to **NoTopic**; YouTube video tabs pre-fetch metadata to match channel-level rules.
+  - "Skip all tabs" quick checkbox to skip or restore all rows at once.
+  - "Close tabs after filing" checkbox (auto-closes filed tabs while leaving skipped tabs untouched).
+  - "Insert in right-to-left tab order" checkbox to preserve tab strip visual priority.
 
-### Layout
+- **Cross-Device Sync & Android Companion PWA**:
+  - Bidirectional, offline-first synchronization between Chrome desktop extension and Android PWA via the user's private Google Drive `appDataFolder`.
+  - Android companion PWA supports Web Share Target (save tabs from Android Chrome via the system share sheet), responsive mobile manager, and queue sorting.
+  - Resolves concurrent edits using deterministic 3-way merge and tombstone-based deletion sync.
 
-```
-extension/
-  manifest.json                 MV3 manifest (permissions: tabs, storage, favicon, identity, alarms)
-  auth.js                       Chrome identity OAuth integration
-  background/service-worker.js  background sync alarm + shortcut windows
-  shared/logic.js               pure data logic (queues, rules, search, import)
-  shared/youtube.js             YouTube Data API fetch + metadata cache orchestration
-  shared/store.js               chrome.storage.local persistence (+ memory adapter for tests)
-  shared/sync.js                pure 3-way merge engine + tombstone management
-  shared/sync-engine.js         sync lifecycle orchestration (extension & PWA)
-  shared/drive.js               Google Drive appDataFolder REST API wrapper
-  popup/                        toolbar popup: quick save, bulk filing, skip-all, search, recents
-  quick/                        shortcut windows: topic picker, note editor
-  page/                         full-page manager: topics, 3 queues, open & delete, rules, sync settings
-pwa/                            Android companion Progressive Web App
-  auth.js                       Google Identity Services OAuth token client
-  idb-adapter.js                IndexedDB persistence adapter
-  share-receive.html / .js      Web Share Target receiver with YouTube enrichment
-  index.html / .js / .css       full mobile manager UI
-  sw.js                         offline service worker
-  shared/                       identical shared modules matching extension/shared/
-test/logic.test.js              node:test suite for the logic layer
-test/sync.test.js               node:test suite for the sync layer
-tools/                          icon generator, build validator
-```
+- **Live Search & Notes**:
+  - Real-time substring search across note contents, tab titles, URLs, topic names, and YouTube channel names.
+  - Single editable plain-text note per entry.
 
-## Verification & test log (from the build session)
+- **Offline-First Persistence & JSON Portability**:
+  - All data is saved locally immediately (`chrome.storage.local` on desktop, `IndexedDB` on PWA) and persists across tab closures and browser restarts.
+  - Export and import all data (topics, queues, entries, notes, rules, and masked settings) as a single portable JSON file with automatic merge and local-wins conflict resolution.
 
-This section records what was verified while building the extension, what
-could not be machine-tested and why, and the short checklist to confirm by
-hand. The spec-side view of the same information lives in
-[`docs/requirements-review.md`](docs/requirements-review.md) §7, §8, and §9.
+---
 
-### Automated verification — all green
+## Known Limitations
 
-- **79/79 unit tests pass** (`npm test`, Node's built-in runner across 5 test suites):
-  - **57 logic tests (`test/logic.test.js`)**: Topic CRUD (including delete-requires-moving-entries), NoTopic at the top,
-    seeding, migration, `ensureTopic` find-or-create, save-to-`to_be_ordered`, duplicate handling, queue moves,
-    reordering with clamped positions, domain/URL-pattern/YouTube-channel rule matching, first-enabled-rule-wins,
-    disabled rules, search across notes/title/URL/topic/channel, export/import merge with local-wins conflicts,
-    storage adapters, YouTube video-URL parsing, `ytChannelId`/`ytChannelName` rule semantics, `ensureYtMeta`
-    caching/tombstone/error behavior, header-based API key transport, stamping/backfill, YouTube bulk topic determination,
-    bulk skip all tabs, and sorting YouTube videos by published date (newest/oldest toggle with undated tab stability).
-  - **22 sync tests (`test/sync.test.js`)**: Unique device ID generation, Drive server clock offset calculation,
-    record stamping, tombstone creation and 30-day pruning, LWW comparisons with deterministic tiebreaking,
-    3-way collection merge with concurrent edits, tombstone deletion vs edit, resurrection, full state merge
-    with NoTopic invariant preservation, sequential queue reindexing across queues, settings sync, Google Drive
-    REST client file creation/download/upload/error handling, full sync cycle, tab deletion sync across devices,
-    canonical topic ID normalization across devices, and cross-device queue sorting / position reordering sync.
-- **`npm run build` validates**: MV3 manifest parses, every manifest-referenced
-  asset exists, all JS files parse as ES modules, every HTML-referenced local
-  asset resolves, shared modules import cleanly and behave.
-- Icons are generated dependency-free by `npm run icons`.
+- **Channel ID and Channel Name rules match video URLs only**: Rules matching by YouTube Channel ID (`UC...`) or Channel Name evaluate against metadata fetched from video watch URLs. Direct YouTube channel landing pages (such as `youtube.com/@handle/videos`) do not contain video IDs and are matched via `@handle` rules or URL pattern rules rather than channel ID/name rules.
+- **Publish-date-based filtering rules are not supported**: While YouTube publish dates are fetched, stamped on entries, and used for queue sorting (`Sort YT ↓` / `Sort YT ↑`), automated classification rules based on publish date (e.g. matching videos published within the last N days) are not supported.
+- **Single-topic membership (one topic per URL)**: Entries cannot belong to multiple topics simultaneously. Saving an already-saved URL moves the entry to the new topic's `to_be_ordered` queue while preserving any existing note.
+- **Topic deletion requires moving entries**: A topic cannot be deleted while it contains active entries without first selecting an existing destination topic to receive them. Any classification rules targeting the deleted topic are automatically removed.
+- **Android PWA cannot close originating Chrome tab**: When saving a link to the PWA via Android's system share sheet (Web Share Target), the PWA cannot close the originating Chrome browser tab due to standard web platform security restrictions.
+- **Single note per entry**: Each entry supports a single editable plain-text note rather than timestamped note history.
+- **Intra-topic prioritization**: Prioritization and ordering are scoped within each topic's three queues; there are no global cross-topic priority flags or due dates.
 
-### v2 session — YouTube enrichment & Cross-Device Sync
+---
 
-- **Enrichment & Sync**: YouTube metadata fetched via Data API v3, channel-based rule classification,
-  and bidirectional cross-device sync between Chrome extension and Android PWA companion via Google Drive `appDataFolder`.
-- **Deletion sync**: Deletions recorded as tombstones and synced across devices with canonical topic ID remapping.
-- **Bulk filing**: Pre-fetches YouTube metadata to determine topics automatically, with "Skip all tabs" quick toggle.
-- **Open & Delete**: One-click `↗✕` / `↗ Open & Delete` action opens the tab and removes it from the queue.
-- **YouTube Queue Sorting**: `Sort YT ↓` / `Sort YT ↑` button in every queue moves dated YouTube videos to the top sorted by published date (newest or oldest first).
+## Documentation & Developer Guide
 
-### Verified live in Chrome (v152, macOS)
-
-- Installed as an unpacked extension (ID `bnncfndaieaemoibgmgdmcdoakoflgdp`);
-  enabled, service worker registered, **zero console errors**.
-- **Manager page**: topics sidebar with per-topic queue counts, all three
-  queue columns rendering, topic-creation dialog exercised end-to-end
-  (a "News" topic was created through the real UI).
-- **Persistence**: data survived extension reloads *and* a full browser
-  quit/relaunch — the `chrome.storage.local` record is durable.
-- **Quick picker page**: renders correctly when opened directly, including its
-  "Tab no longer exists" guard for invalid tab ids.
-- **Shortcuts registered** with the intended bindings (visible at
-  `chrome://extensions/shortcuts`).
-
-### Bug found and fixed during verification
-
-The service worker originally passed a **relative** URL to
-`chrome.windows.create`, which MV3 does not reliably resolve (there is no
-background page to resolve against) — the picker window would silently fail
-to open. Fixed by building absolute URLs with `chrome.runtime.getURL(...)`.
-If you forked an older copy of this repo, make sure you have that fix.
-
-### Why the keyboard chords could not be machine-tested
-
-Chrome's browser-level command dispatch (extension shortcuts) only honors
-trusted hardware input. This was proven, not assumed: with a clean Chrome
-restart and the chord delivered to the confirmed frontmost window, neither
-⇧⌘U nor ⇧⌘Space fired — and ⇧⌘Space invokes `_execute_action`, which is
-Chrome's own native handler with none of this extension's code involved.
-Conclusion: it is an input-trust limitation of synthetic keyboard events, not
-an extension defect. The chords are the one item to confirm by hand:
-
-1. **⌥⇧U** on any web page → picker window opens; type-to-filter topics,
-   ↑↓ + Enter (or number keys) saves into that topic's `to_be_ordered`;
-   "close tab after adding" is optional.
-2. **⌥⇧N** → note window; files the tab first (with a topic picker) if it
-   isn't saved yet, then edits the note; ⌘/Ctrl+Enter saves.
-   "Close tab after saving" checkbox is unchecked by default.
-3. **⇧⌘Space** → popup: quick Add for the current tab, "File all tabs in this
-   window" bulk filing (each tab defaults to NoTopic; rules override; "— skip —"
-   excludes the tab; "Close tabs after filing" checkbox unchecked by default),
-   search, recents.
-4. In the manager: drag entries between queues or onto a sidebar topic to move
-   cross-topic, use Order → / Done ✓, edit notes inline, add a domain rule
-   (e.g. `example.com` → News) and reload a matching page to see the "suggested"
-   badge pre-selected in the picker, and try Settings → Export / Import JSON.
-
-### Notes for future test automation
-
-- Chrome 152 blocks `--remote-debugging-port` on the default profile and has
-  removed `--load-extension` from branded Stable builds, so CDP-driven testing
-  of this extension requires either an older Chrome or a fresh
-  `--user-data-dir` plus a manual unpacked install.
-- AppleScript UI scripting via System Events is not authorized for shell
-  processes in this environment.
-- Long-running accessibility sessions can degrade the computer-use helper's
-  cached view of Chrome (duplicated menu-bar elements, unreadable windows);
-  restarting the helper (quit and reopen ZCode) clears it. Restarting Chrome
-  alone does not.
-
-## Known limitations
-
-- **YouTube enrichment needs a user-provided API key** (Settings). Without
-  it — or when the key is invalid/quota-exceeded — watch URLs are classified
-  by URL rules only and entries carry no channel/publish-date stamp; failures
-  surface as console warnings.
-- **Channel-id/name rules don't fire on channel pages** —
-  `youtube.com/@handle/…` URLs are still matched by handle rules only,
-  because resolving a handle to its `UC…` id needs a second API call that
-  isn't built.
-- **One topic per URL** — saving an already-saved URL moves it (note kept,
-  queue reset to `to_be_ordered`).
-- **Deleting a topic requires moving its entries** to another topic first;
-  rules targeting a deleted topic are removed.
-- Keyboard bindings live in Chrome, so they cannot be *applied* from an import
-  file; the export includes a reference copy of the manifest shortcuts, but
-  changing actual bindings is done at `chrome://extensions/shortcuts`.
-- Data is stored locally first (`chrome.storage.local` on desktop, `IndexedDB` on PWA)
-  and synced to Google Drive when sync is enabled; offline edits accumulate and sync
-  automatically when reconnected.
+- **[developer.md](developer.md)** — Developer documentation, installation in unpacked/developer mode, test suite execution, build validation, repository layout, and verification logs.
+- **[docs/setup_v2.md](docs/setup_v2.md)** — Step-by-step setup guide for Google Cloud Console OAuth 2.0 credentials and YouTube Data API keys.
+- **[docs/walkthrough_v2.md](docs/walkthrough_v2.md)** — End-to-end user walkthrough of desktop extension and mobile PWA workflows.
+- **[docs/requirements_v2.md](docs/requirements_v2.md)** — v2 architecture specification for cross-device sync, Android PWA, and YouTube enrichment.
+- **[docs/requirements-review.md](docs/requirements-review.md)** — Baseline v1 specification, requirements review, and design decisions.
