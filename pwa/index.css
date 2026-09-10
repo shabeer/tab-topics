@@ -491,7 +491,17 @@ button.linkish {
   padding: 0;
   cursor: pointer;
 }
+button.linkish:hover {
+  text-decoration: underline;
+}
 button.linkish.danger { color: var(--danger); }
+a.linkish {
+  color: var(--accent);
+  text-decoration: none;
+}
+a.linkish:hover {
+  text-decoration: underline;
+}
 .icon-btn {
   padding: 6px 10px;
   font-size: 13px;

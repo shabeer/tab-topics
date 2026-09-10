@@ -45,6 +45,15 @@
     .form-group {
       margin-bottom: 12px;
     }
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .label-row label {
+      margin-bottom: 0;
+    }
     .form-group label {
       display: block;
       font-size: 12px;
@@ -85,7 +94,10 @@
 
       <form id="share-form">
         <div class="form-group">
-          <label for="share-topic">Topic</label>
+          <div class="label-row">
+            <label for="share-topic">Topic</label>
+            <button type="button" id="new-topic-btn" class="linkish">+ New topic</button>
+          </div>
           <select id="share-topic"></select>
         </div>
 
@@ -101,6 +113,18 @@
       </form>
     </div>
   </div>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form">
+      <h3 id="dlg-title">New topic</h3>
+      <label id="dlg-label" for="dlg-input">Topic name</label>
+      <input id="dlg-input" type="text" autocomplete="off" placeholder="e.g. Work, Research…">
+      <div class="dlg-row">
+        <button value="ok" class="primary">Create</button>
+        <button value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="share-receive.js"></script>
 </body>

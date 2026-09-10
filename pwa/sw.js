@@ -1,5 +1,5 @@
 // Tab Topics PWA Service Worker
-const CACHE_NAME = 'tab-topics-v2-cache-v2';
+const CACHE_NAME = 'tab-topics-v2-cache-v3';
 
 const STATIC_ASSETS = [
   './',

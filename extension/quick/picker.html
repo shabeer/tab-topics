@@ -11,13 +11,31 @@
     <div id="tab-host"></div>
   </header>
 
-  <input id="filter" type="text" placeholder="Filter topics — ↑↓ + Enter, 1-9, Esc" autofocus>
+  <div class="filter-row">
+    <input id="filter" type="text" placeholder="Filter topics — ↑↓ + Enter, 1-9, Esc" autofocus>
+    <button id="new-topic-btn" class="icon-btn-filter" title="Create new topic">+ New</button>
+  </div>
 
   <ul id="list"></ul>
 
   <footer>
-    <label class="chk"><input type="checkbox" id="close-after"> Close tab after adding</label>
+    <div class="footer-row">
+      <label class="chk"><input type="checkbox" id="close-after"> Close tab after adding</label>
+      <button id="footer-new-topic-btn" class="linkish">+ New topic</button>
+    </div>
   </footer>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form">
+      <h3 id="dlg-title">New topic</h3>
+      <label id="dlg-label" for="dlg-input">Topic name</label>
+      <input id="dlg-input" type="text" autocomplete="off" placeholder="e.g. Work, Research…">
+      <div class="dlg-row">
+        <button value="ok" class="primary">Create</button>
+        <button value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="picker.js"></script>
 </body>

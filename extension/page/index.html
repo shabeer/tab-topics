@@ -11,6 +11,7 @@
     <input id="global-search" type="search" placeholder="Search notes, titles, URLs, topics…">
     <button id="toggle-rules">Rules</button>
     <button id="toggle-settings">Settings</button>
+    <button id="toggle-about">About</button>
   </div>
 
   <div id="rules-panel" class="panel" hidden>
@@ -74,6 +75,15 @@
       </div>
       <div id="sync-details" class="panel-hint" hidden></div>
     </div>
+  </div>
+
+  <div id="about-panel" class="panel" hidden>
+    <p class="panel-hint">
+      Tab Topics is an offline-first tab manager that saves tabs as persistent entries, organizes them into user-defined topics through a three-stage queue workflow (<code>to_be_ordered</code> → <code>ordered</code> → <code>done</code>), enriches YouTube videos with channel and publish-date metadata, and synchronizes state across devices using Google Drive (<code>appDataFolder</code>).
+    </p>
+    <p class="panel-hint">
+      For documentation, source code, and setup guides, visit the <a href="https://github.com/shabeer/tab-topics" target="_blank" rel="noopener" class="linkish">GitHub repository ↗</a>.
+    </p>
   </div>
 
   <div id="layout">

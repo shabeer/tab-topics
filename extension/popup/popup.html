@@ -14,6 +14,7 @@
     <div class="tab-line"><span id="cur-title">…</span></div>
     <div class="row">
       <select id="topic-select"></select>
+      <button id="new-topic-btn" class="secondary-btn" title="Create new topic">+ New</button>
       <button id="add-btn" class="primary">Add</button>
     </div>
     <label class="chk"><input type="checkbox" id="close-after"> Close tab after adding</label>
@@ -21,7 +22,10 @@
   </section>
 
   <section class="card">
-    <button id="bulk-toggle" class="linkish">File all tabs in this window…</button>
+    <div class="card-header-row">
+      <button id="bulk-toggle" class="linkish">File all tabs in this window…</button>
+      <button id="bulk-new-topic-btn" class="linkish" title="Create new topic">+ New topic</button>
+    </div>
     <div id="bulk-area" hidden>
       <div id="bulk-list"></div>
       <label class="chk"><input type="checkbox" id="bulk-skip-all"> Skip all tabs</label>
@@ -47,8 +51,24 @@
 
   <footer>
     <span class="muted">⌥⇧U quick save · ⌥⇧N note · ⇧⌘Space popup</span>
-    <a href="#" id="shortcuts-link">Customize shortcuts</a>
+    <div class="footer-links">
+      <a href="https://github.com/shabeer/tab-topics" target="_blank" rel="noopener" id="github-link">GitHub ↗</a>
+      ·
+      <a href="#" id="shortcuts-link">Shortcuts</a>
+    </div>
   </footer>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form">
+      <h3 id="dlg-title">New topic</h3>
+      <label id="dlg-label" for="dlg-input">Topic name</label>
+      <input id="dlg-input" type="text" autocomplete="off" placeholder="e.g. Work, Research…">
+      <div class="dlg-row">
+        <button value="ok" class="primary">Create</button>
+        <button value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="popup.js"></script>
 </body>

@@ -22,6 +22,7 @@
         </button>
         <button id="toggle-rules" class="icon-btn" title="Rules">⚙ Rules</button>
         <button id="toggle-settings" class="icon-btn" title="Settings">☰ Settings</button>
+        <button id="toggle-about" class="icon-btn" title="About">ℹ About</button>
       </div>
     </div>
     <div class="search-row">
@@ -34,6 +35,7 @@
     <form id="quick-add-form" class="quick-add-row">
       <input id="quick-add-url" type="url" placeholder="Paste URL to save…" required autocomplete="off">
       <select id="quick-add-topic"></select>
+      <button type="button" id="quick-add-new-topic" class="icon-btn" title="Create new topic">+ New</button>
       <button type="submit" class="primary">Add</button>
     </form>
     <div id="quick-add-status" class="status-msg" hidden></div>
@@ -112,6 +114,20 @@
         </label>
       </div>
     </div>
+  </div>
+
+  <!-- About Panel -->
+  <div id="about-panel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>About Tab Topics</h2>
+      <button class="close-panel-btn" data-target="about-panel">✕</button>
+    </div>
+    <p class="panel-hint">
+      Tab Topics is an offline-first tab manager that saves tabs as persistent entries, organizes them into user-defined topics through a three-stage queue workflow (<em>to_be_ordered</em> → <em>ordered</em> → <em>done</em>), enriches YouTube videos with channel and publish-date metadata, and synchronizes state across devices using Google Drive (<em>appDataFolder</em>).
+    </p>
+    <p class="panel-hint">
+      For details, documentation, and source code, visit the <a href="https://github.com/shabeer/tab-topics" target="_blank" rel="noopener" class="linkish">GitHub repository ↗</a>.
+    </p>
   </div>
 
   <!-- Topic Selector Bar -->

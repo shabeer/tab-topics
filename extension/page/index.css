@@ -88,7 +88,7 @@ button.primary:hover { opacity: 0.92; }
 #topic-list li .icon-btn { opacity: 0; }
 #topic-list li:hover .icon-btn { opacity: 1; }
 
-.icon-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 12px; padding: 2px 4px; }
+.icon-btn { border: none; background: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 3px 6px; }
 .icon-btn:hover { color: var(--text); }
 .icon-btn.danger:hover { color: #dc2626; }
 
@@ -157,8 +157,28 @@ button.linkish:hover { text-decoration: underline; }
   color: var(--accent);
 }
 
-.entry-actions { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 2px 24px; }
-.entry-actions button { font-size: 11px; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); cursor: pointer; white-space: nowrap; }
+.entry-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 6px 0 2px 24px; }
+.entry-actions button {
+  font-size: 12px;
+  padding: 5px 9px;
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.entry-actions button.icon-btn-card {
+  font-size: 14px;
+  padding: 4px 9px;
+  min-width: 30px;
+}
+.entry-actions button.open-del {
+  font-size: 13px;
+}
 .entry-actions button:hover { border-color: var(--accent); color: var(--accent); }
 .entry-actions button.done-btn:hover { border-color: var(--green); color: var(--green); }
 .entry-actions button.open-del:hover { border-color: #dc2626; color: #dc2626; }
@@ -209,4 +229,8 @@ dialog input, dialog select { width: 100%; font: inherit; padding: 7px 9px; bord
 .sync-status-badge.syncing { background: #e0e7ff; border-color: #a5b4fc; color: #4338ca; }
 .sync-status-badge.error { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .sync-status-badge.offline { background: #fef3c7; border-color: #fde68a; color: #b45309; }
+
+.about-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.about-section h3 { margin: 0 0 6px; font-size: 13px; }
+
 

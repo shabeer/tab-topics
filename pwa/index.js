@@ -33,8 +33,10 @@ const els = {
   search: document.getElementById('global-search'),
   toggleRules: document.getElementById('toggle-rules'),
   toggleSettings: document.getElementById('toggle-settings'),
+  toggleAbout: document.getElementById('toggle-about'),
   rulesPanel: document.getElementById('rules-panel'),
   settingsPanel: document.getElementById('settings-panel'),
+  aboutPanel: document.getElementById('about-panel'),
   rulesBody: document.getElementById('rules-body'),
   ruleType: document.getElementById('rule-type'),
   ruleValue: document.getElementById('rule-value'),
@@ -43,6 +45,7 @@ const els = {
   quickAddForm: document.getElementById('quick-add-form'),
   quickAddUrl: document.getElementById('quick-add-url'),
   quickAddTopic: document.getElementById('quick-add-topic'),
+  quickAddNewTopic: document.getElementById('quick-add-new-topic'),
   quickAddStatus: document.getElementById('quick-add-status'),
   topicChips: document.getElementById('topic-chips'),
   newTopicBtn: document.getElementById('new-topic-btn'),
@@ -565,14 +568,22 @@ async function init() {
   els.toggleRules.addEventListener('click', () => {
     els.rulesPanel.hidden = !els.rulesPanel.hidden;
     els.settingsPanel.hidden = true;
+    els.aboutPanel.hidden = true;
   });
   els.toggleSettings.addEventListener('click', () => {
     els.settingsPanel.hidden = !els.settingsPanel.hidden;
     els.rulesPanel.hidden = true;
+    els.aboutPanel.hidden = true;
+  });
+  els.toggleAbout?.addEventListener('click', () => {
+    els.aboutPanel.hidden = !els.aboutPanel.hidden;
+    els.rulesPanel.hidden = true;
+    els.settingsPanel.hidden = true;
   });
   els.syncQuickBtn.addEventListener('click', () => {
     els.settingsPanel.hidden = false;
     els.rulesPanel.hidden = true;
+    els.aboutPanel.hidden = true;
   });
 
   document.querySelectorAll('.close-panel-btn').forEach((btn) => {
@@ -613,6 +624,19 @@ async function init() {
     els.quickAddStatus.hidden = false;
     setTimeout(() => { els.quickAddStatus.hidden = true; }, 2000);
     await persistAndRender();
+  });
+
+  els.quickAddNewTopic?.addEventListener('click', async () => {
+    const name = await openDialog({ title: 'New topic', label: 'Topic name' });
+    if (!name) return;
+    let t = logic.findTopicByName(state, name);
+    if (!t) {
+      t = logic.addTopic(state, name);
+    }
+    if (!t) return window.alert('Topic already exists or name is invalid');
+    selectedTopicId = t.id;
+    await persistAndRender();
+    if (els.quickAddTopic) els.quickAddTopic.value = t.id;
   });
 
   // Topic Management

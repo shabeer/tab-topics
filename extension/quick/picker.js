@@ -14,6 +14,13 @@ const els = {
   filter: document.getElementById('filter'),
   list: document.getElementById('list'),
   closeAfter: document.getElementById('close-after'),
+  newTopicBtn: document.getElementById('new-topic-btn'),
+  footerNewTopicBtn: document.getElementById('footer-new-topic-btn'),
+  dlg: document.getElementById('dlg'),
+  dlgForm: document.getElementById('dlg-form'),
+  dlgTitle: document.getElementById('dlg-title'),
+  dlgLabel: document.getElementById('dlg-label'),
+  dlgInput: document.getElementById('dlg-input'),
 };
 
 let tab = null;
@@ -61,6 +68,41 @@ function renderTabHost(meta = null) {
   }
 }
 
+function promptNewTopic(defaultName = '') {
+  return new Promise((resolve) => {
+    if (!els.dlg) {
+      const name = window.prompt('Enter new topic name:', defaultName);
+      resolve(name ? name.trim() : null);
+      return;
+    }
+    els.dlgTitle.textContent = 'New topic';
+    els.dlgLabel.textContent = 'Topic name';
+    els.dlgInput.value = defaultName;
+    const onClose = () => {
+      els.dlg.removeEventListener('close', onClose);
+      const ok = els.dlg.returnValue === 'ok';
+      resolve(ok ? els.dlgInput.value.trim() : null);
+    };
+    els.dlg.addEventListener('close', onClose);
+    els.dlg.showModal();
+    els.dlgInput.focus();
+  });
+}
+
+async function handleCreateNewTopic() {
+  const defaultName = els.filter.value.trim();
+  const name = await promptNewTopic(defaultName);
+  if (!name) return;
+  let topic = logic.findTopicByName(state, name);
+  if (!topic) {
+    topic = logic.addTopic(state, name);
+  }
+  if (topic) {
+    await saveState(chromeAdapter(), state);
+    await confirm(topic.id);
+  }
+}
+
 async function init() {
   try {
     tab = await chrome.tabs.get(tabId);
@@ -95,6 +137,9 @@ async function init() {
     state.settings.closeAfterAdd = els.closeAfter.checked;
     await saveState(chromeAdapter(), state);
   });
+
+  els.newTopicBtn?.addEventListener('click', handleCreateNewTopic);
+  els.footerNewTopicBtn?.addEventListener('click', handleCreateNewTopic);
 
   // Pre-select suggested topic or NoTopic
   visible = [...state.topics];
@@ -136,7 +181,16 @@ async function init() {
     }
   });
 
-  els.list.addEventListener('click', (e) => {
+  els.list.addEventListener('click', async (e) => {
+    const createEl = e.target.closest('.create-topic-item');
+    if (createEl) {
+      const q = els.filter.value.trim();
+      if (q) {
+        let topic = logic.findTopicByName(state, q) || logic.addTopic(state, q);
+        if (topic) await confirm(topic.id);
+      }
+      return;
+    }
     const li = e.target.closest('li[data-topic-id]');
     if (li) {
       touched = true;
@@ -159,7 +213,16 @@ function render() {
   if (!visible.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'No matching topics';
+    const qRaw = els.filter.value.trim();
+    if (qRaw) {
+      li.classList.add('create-topic-item');
+      li.textContent = `+ Create new topic "${qRaw}" (Enter)`;
+      li.style.cursor = 'pointer';
+      li.style.color = '#4f46e5';
+      li.style.fontWeight = '500';
+    } else {
+      li.textContent = 'No matching topics';
+    }
     els.list.append(li);
     return;
   }
@@ -192,7 +255,15 @@ function render() {
   }
 }
 
-function confirmSelected() {
+async function confirmSelected() {
+  const q = els.filter.value.trim();
+  if (!visible.length && q) {
+    let topic = logic.findTopicByName(state, q) || logic.addTopic(state, q);
+    if (topic) {
+      await confirm(topic.id);
+    }
+    return;
+  }
   const topic = visible[selected];
   if (topic) confirm(topic.id);
 }

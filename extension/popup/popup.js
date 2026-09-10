@@ -21,6 +21,14 @@ const els = {
   recent: document.getElementById('recent'),
   openManager: document.getElementById('open-manager'),
   shortcuts: document.getElementById('shortcuts-link'),
+  githubLink: document.getElementById('github-link'),
+  newTopicBtn: document.getElementById('new-topic-btn'),
+  bulkNewTopicBtn: document.getElementById('bulk-new-topic-btn'),
+  dlg: document.getElementById('dlg'),
+  dlgForm: document.getElementById('dlg-form'),
+  dlgTitle: document.getElementById('dlg-title'),
+  dlgLabel: document.getElementById('dlg-label'),
+  dlgInput: document.getElementById('dlg-input'),
 };
 
 let state = null;
@@ -194,6 +202,42 @@ async function refreshCurrentTabCard() {
   if (currentTab.url === tab.url) populateTopicSelect(els.topicSelect);
 }
 
+function promptNewTopic(defaultName = '') {
+  return new Promise((resolve) => {
+    if (!els.dlg) {
+      const name = window.prompt('Enter new topic name:', defaultName);
+      resolve(name ? name.trim() : null);
+      return;
+    }
+    els.dlgTitle.textContent = 'New topic';
+    els.dlgLabel.textContent = 'Topic name';
+    els.dlgInput.value = defaultName;
+    const onClose = () => {
+      els.dlg.removeEventListener('close', onClose);
+      const ok = els.dlg.returnValue === 'ok';
+      resolve(ok ? els.dlgInput.value.trim() : null);
+    };
+    els.dlg.addEventListener('close', onClose);
+    els.dlg.showModal();
+    els.dlgInput.focus();
+  });
+}
+
+function refreshBulkSelects() {
+  const rows = els.bulkList.querySelectorAll('.bulk-row');
+  for (const row of rows) {
+    const select = row.querySelector('select');
+    if (!select) continue;
+    const currentVal = select.value;
+    const isUserModified = select.dataset.userModified === 'true';
+    populateBulkSelect(select, row.dataset.url, currentVal || null);
+    if (isUserModified && currentVal) {
+      select.value = currentVal;
+      select.dataset.userModified = 'true';
+    }
+  }
+}
+
 async function afterStateChange() {
   await saveState(chromeAdapter(), state);
   renderRecent();
@@ -222,6 +266,44 @@ async function init() {
   els.topicSelect.addEventListener('change', () => {
     userPickedTopicId = els.topicSelect.value;
   });
+
+  if (els.newTopicBtn) {
+    els.newTopicBtn.addEventListener('click', async () => {
+      const name = await promptNewTopic();
+      if (!name) return;
+      let topic = logic.findTopicByName(state, name);
+      if (!topic) {
+        topic = logic.addTopic(state, name);
+      }
+      if (!topic) return;
+      userPickedTopicId = topic.id;
+      populateTopicSelect(els.topicSelect, topic.id);
+      await saveState(chromeAdapter(), state);
+      if (!els.bulkArea.hidden) {
+        refreshBulkSelects();
+      }
+    });
+  }
+
+  if (els.bulkNewTopicBtn) {
+    els.bulkNewTopicBtn.addEventListener('click', async () => {
+      const name = await promptNewTopic();
+      if (!name) return;
+      let topic = logic.findTopicByName(state, name);
+      if (!topic) {
+        topic = logic.addTopic(state, name);
+      }
+      if (!topic) return;
+      populateTopicSelect(els.topicSelect);
+      await saveState(chromeAdapter(), state);
+      if (els.bulkArea.hidden) {
+        await renderBulk();
+        els.bulkArea.hidden = false;
+      } else {
+        refreshBulkSelects();
+      }
+    });
+  }
 
   els.addBtn.addEventListener('click', async () => {
     if (!currentTab || !els.topicSelect.value) return;
@@ -324,6 +406,13 @@ async function init() {
     chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
     window.close();
   });
+  if (els.githubLink) {
+    els.githubLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'https://github.com/shabeer/tab-topics' });
+      window.close();
+    });
+  }
 
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {

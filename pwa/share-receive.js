@@ -17,6 +17,12 @@ const els = {
   form: document.getElementById('share-form'),
   saveBtn: document.getElementById('save-btn'),
   cancelBtn: document.getElementById('cancel-btn'),
+  newTopicBtn: document.getElementById('new-topic-btn'),
+  dlg: document.getElementById('dlg'),
+  dlgForm: document.getElementById('dlg-form'),
+  dlgTitle: document.getElementById('dlg-title'),
+  dlgLabel: document.getElementById('dlg-label'),
+  dlgInput: document.getElementById('dlg-input'),
 };
 
 let state = null;
@@ -24,6 +30,31 @@ let targetUrl = '';
 let targetTitle = '';
 let ytMetadata = null;
 let ruleSuggestion = null;
+
+function openDialog({ title, label, value = '' }) {
+  return new Promise((resolve) => {
+    if (!els.dlg) {
+      const res = window.prompt(title, value);
+      resolve(res ? res.trim() : null);
+      return;
+    }
+    els.dlgTitle.textContent = title;
+    els.dlgLabel.textContent = label;
+    els.dlgInput.value = value;
+
+    const onClose = () => {
+      els.dlg.removeEventListener('close', onClose);
+      if (els.dlg.returnValue === 'ok') {
+        resolve(els.dlgInput.value.trim());
+      } else {
+        resolve(null);
+      }
+    };
+    els.dlg.addEventListener('close', onClose);
+    els.dlg.showModal();
+    els.dlgInput.focus();
+  });
+}
 
 function extractUrlFromParams() {
   const params = new URLSearchParams(window.location.search);
@@ -91,6 +122,18 @@ async function init() {
       els.ytInfo.hidden = true;
     }
   }
+
+  els.newTopicBtn?.addEventListener('click', async () => {
+    const name = await openDialog({ title: 'New topic', label: 'Topic name' });
+    if (!name) return;
+    let t = logic.findTopicByName(state, name);
+    if (!t) {
+      t = logic.addTopic(state, name);
+    }
+    if (!t) return window.alert('Invalid topic name or creation failed');
+    await saveState(adapter, state);
+    populateTopics(t.id);
+  });
 
   els.cancelBtn.addEventListener('click', () => {
     window.location.href = './index.html';

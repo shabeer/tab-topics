@@ -28,8 +28,10 @@ const els = {
   search: document.getElementById('global-search'),
   toggleRules: document.getElementById('toggle-rules'),
   toggleSettings: document.getElementById('toggle-settings'),
+  toggleAbout: document.getElementById('toggle-about'),
   rulesPanel: document.getElementById('rules-panel'),
   settingsPanel: document.getElementById('settings-panel'),
+  aboutPanel: document.getElementById('about-panel'),
   rulesBody: document.getElementById('rules-body'),
   ruleType: document.getElementById('rule-type'),
   ruleValue: document.getElementById('rule-value'),
@@ -401,6 +403,7 @@ function buildEntryRow(entry, queue) {
   // Copy URL — also the workaround for file:// entries, which Chrome refuses
   // to open from an extension page unless "Allow access to file URLs" is on.
   const copyBtn = document.createElement('button');
+  copyBtn.className = 'icon-btn-card';
   copyBtn.title = 'Copy URL';
   copyBtn.textContent = '⧉';
   copyBtn.addEventListener('click', async () => {
@@ -414,16 +417,16 @@ function buildEntryRow(entry, queue) {
   });
   actions.append(copyBtn);
 
-  actions.append(mk('✎', 'Edit note', '', () => {
+  actions.append(mk('✎', 'Edit note', 'icon-btn-card', () => {
     editingEntryId = editingEntryId === entry.id ? null : entry.id;
     render();
   }));
-  actions.append(mk('↗✕', 'Open URL and delete entry', 'open-del', async () => {
+  actions.append(mk('↗✕', 'Open URL and delete entry', 'open-del icon-btn-card', async () => {
     window.open(entry.url, '_blank');
     logic.deleteEntry(state, entry.id);
     await persistAndRender();
   }));
-  actions.append(mk('✕', 'Delete entry', 'del', async () => {
+  actions.append(mk('✕', 'Delete entry', 'del icon-btn-card', async () => {
     if (window.confirm(`Delete "${entry.title}"?`)) {
       logic.deleteEntry(state, entry.id);
       await persistAndRender();
@@ -839,14 +842,26 @@ async function init() {
   els.toggleRules.addEventListener('click', () => {
     els.rulesPanel.hidden = !els.rulesPanel.hidden;
     els.settingsPanel.hidden = true;
+    els.aboutPanel.hidden = true;
     els.toggleRules.classList.toggle('active', !els.rulesPanel.hidden);
     els.toggleSettings.classList.remove('active');
+    els.toggleAbout.classList.remove('active');
   });
   els.toggleSettings.addEventListener('click', () => {
     els.settingsPanel.hidden = !els.settingsPanel.hidden;
     els.rulesPanel.hidden = true;
+    els.aboutPanel.hidden = true;
     els.toggleSettings.classList.toggle('active', !els.settingsPanel.hidden);
     els.toggleRules.classList.remove('active');
+    els.toggleAbout.classList.remove('active');
+  });
+  els.toggleAbout.addEventListener('click', () => {
+    els.aboutPanel.hidden = !els.aboutPanel.hidden;
+    els.rulesPanel.hidden = true;
+    els.settingsPanel.hidden = true;
+    els.toggleAbout.classList.toggle('active', !els.aboutPanel.hidden);
+    els.toggleRules.classList.remove('active');
+    els.toggleSettings.classList.remove('active');
   });
 
   els.newTopic.addEventListener('click', async () => {
