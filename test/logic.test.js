@@ -836,6 +836,19 @@ test('bulk filing skips tabs when topic selection is empty string', () => {
   assert.equal(logic.findEntryByUrl(s, 'https://example.com/2'), null);
 });
 
+// --- YouTube channel URL generator ---------------------------------------------
+
+test('youtubeChannelUrl generates appropriate channel URL by handle, channelId, channelName, or fallback', () => {
+  assert.equal(logic.youtubeChannelUrl({ handle: 'veritasium' }), 'https://www.youtube.com/@veritasium');
+  assert.equal(logic.youtubeChannelUrl({ handle: '@veritasium' }), 'https://www.youtube.com/@veritasium');
+  assert.equal(logic.youtubeChannelUrl({ channelId: UC_A }), `https://www.youtube.com/channel/${UC_A}`);
+  assert.equal(logic.youtubeChannelUrl({ handle: 'test', channelId: UC_A }), 'https://www.youtube.com/@test'); // handle prioritized
+  assert.equal(logic.youtubeChannelUrl({ channelName: 'Veritasium Science' }), 'https://www.youtube.com/results?search_query=Veritasium%20Science');
+  assert.equal(logic.youtubeChannelUrl({}), 'https://www.youtube.com/');
+  assert.equal(logic.youtubeChannelUrl(null), 'https://www.youtube.com/');
+});
+
+
 // --- sort YouTube videos by published date ------------------------------------
 
 test('sortQueueByYoutubePublishDate sorts newest first and moves dated YT to top', () => {

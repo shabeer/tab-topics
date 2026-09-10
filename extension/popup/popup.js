@@ -36,15 +36,56 @@ function hostOf(url) {
   try { return new URL(url).host; } catch { return url; }
 }
 
-// Entry subtitle: channel name and publish date for enriched YouTube videos.
-function entrySubtitle(entry) {
-  const bits = [];
-  if (entry.yt && entry.yt.channelName) bits.push(entry.yt.channelName);
-  if (entry.yt && entry.yt.publishedAt) {
-    const d = new Date(entry.yt.publishedAt);
-    if (!Number.isNaN(d.getTime())) bits.push(`published ${d.toLocaleDateString()}`);
+// Render subtitle into container: for YouTube video links, omit domain name
+// and render a clickable, selectable link to the channel name.
+function renderEntrySubtitle(container, entry, { topicName = null } = {}) {
+  container.replaceChildren();
+  const isYt = !!logic.youtubeVideoIdOf(entry.url) || !!entry.yt;
+  const yt = entry.yt || (state ? logic.ytMetaFor(state, entry.url) : null);
+
+  let hasPrefix = false;
+  if (topicName) {
+    container.append(document.createTextNode(topicName));
+    hasPrefix = true;
   }
-  return bits.length ? `${hostOf(entry.url)} · ${bits.join(' · ')}` : hostOf(entry.url);
+
+  if (!isYt) {
+    const host = hostOf(entry.url);
+    if (hasPrefix) {
+      container.append(document.createTextNode(` · ${host}`));
+    } else {
+      container.append(document.createTextNode(host));
+      hasPrefix = true;
+    }
+  } else if (yt && yt.channelName) {
+    if (hasPrefix) {
+      container.append(document.createTextNode(' · '));
+    }
+    const chLink = document.createElement('a');
+    chLink.className = 'yt-channel-link';
+    chLink.href = logic.youtubeChannelUrl(yt);
+    chLink.target = '_blank';
+    chLink.rel = 'noopener';
+    chLink.draggable = false;
+    chLink.textContent = yt.channelName;
+    chLink.title = `YouTube Channel: ${yt.channelName}`;
+    chLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      chrome.tabs.create({ url: chLink.href });
+      window.close();
+    });
+    container.append(chLink);
+    hasPrefix = true;
+  }
+
+  if (yt && yt.publishedAt) {
+    const d = new Date(yt.publishedAt);
+    if (!Number.isNaN(d.getTime())) {
+      const pubText = `published ${d.toLocaleDateString()}`;
+      container.append(document.createTextNode(hasPrefix ? ` · ${pubText}` : pubText));
+    }
+  }
 }
 
 function populateTopicSelect(select, targetTopicId = null) {
@@ -85,7 +126,7 @@ function entryRow(entry, topicName) {
   t.textContent = entry.title;
   const s = document.createElement('div');
   s.className = 's';
-  s.textContent = topicName ? `${topicName} · ${entrySubtitle(entry)}` : entrySubtitle(entry);
+  renderEntrySubtitle(s, entry, { topicName });
   body.append(t, s);
 
   row.append(img, body);
@@ -97,7 +138,10 @@ function entryRow(entry, topicName) {
     row.append(dot);
   }
   row.append(queueBadge(entry.queue));
-  row.addEventListener('click', () => {
+  row.addEventListener('click', (e) => {
+    if (e.target.closest('.yt-channel-link')) {
+      return;
+    }
     chrome.tabs.create({ url: entry.url });
     window.close();
   });

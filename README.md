@@ -48,11 +48,13 @@ and JSON export/import. Built to the revised specification in
 - **YouTube video enrichment** — for `/watch?v=…`, `youtu.be/…`, `/shorts/…`,
   `/live/…`, and `/embed/…` links, the extension fetches the video's publish
   date, channel name, and channel id once (YouTube Data API v3, cached per
-  video) and stamps them on the entry. Channel-id and channel-name rules can
-  then classify watch URLs, recents/manager show the channel and publish date,
-  and search covers the channel name. Requires a free Data API key pasted into
-  the manager's Settings (included in export JSON in masked form). Without a
-  key, everything works exactly as before on URL rules alone.
+  video) and stamps them on the entry. For tabs of YouTube video links, domain
+  names are omitted in favor of a clickable link directly to the YouTube channel.
+  Channel-id and channel-name rules can classify watch URLs, recents/manager/PWA
+  show the clickable channel link and publish date, and search covers the channel
+  name. Requires a free Data API key pasted into the manager's Settings (included
+  in export JSON in masked form). Without a key, everything works exactly as before
+  on URL rules alone.
 - **Bulk filing** — "File all tabs in this window" in the popup: one topic
   select per tab (rules pre-select matching topics; unmatched tabs default to
   **NoTopic**; YouTube tabs pre-fetch metadata to match channel rules).

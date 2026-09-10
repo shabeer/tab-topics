@@ -89,14 +89,51 @@ function faviconFor(url) {
   }
 }
 
-function entrySubtitle(entry) {
-  const bits = [hostOf(entry.url)];
-  if (entry.yt && entry.yt.channelName) bits.push(entry.yt.channelName);
-  if (entry.yt && entry.yt.publishedAt) {
-    const d = new Date(entry.yt.publishedAt);
-    if (!Number.isNaN(d.getTime())) bits.push(`published ${d.toLocaleDateString()}`);
+// Render subtitle into container: for YouTube video links, omit domain name
+// and render a clickable, selectable link to the channel name.
+function renderEntrySubtitle(container, entry, { topicName = null } = {}) {
+  container.replaceChildren();
+  const isYt = !!logic.youtubeVideoIdOf(entry.url) || !!entry.yt;
+  const yt = entry.yt || (state ? logic.ytMetaFor(state, entry.url) : null);
+
+  let hasPrefix = false;
+  if (topicName) {
+    container.append(document.createTextNode(topicName));
+    hasPrefix = true;
   }
-  return bits.join(' · ');
+
+  if (!isYt) {
+    const host = hostOf(entry.url);
+    if (hasPrefix) {
+      container.append(document.createTextNode(` · ${host}`));
+    } else {
+      container.append(document.createTextNode(host));
+      hasPrefix = true;
+    }
+  } else if (yt && yt.channelName) {
+    if (hasPrefix) {
+      container.append(document.createTextNode(' · '));
+    }
+    const chLink = document.createElement('a');
+    chLink.className = 'yt-channel-link';
+    chLink.href = logic.youtubeChannelUrl(yt);
+    chLink.target = '_blank';
+    chLink.rel = 'noopener';
+    chLink.draggable = false;
+    chLink.textContent = yt.channelName;
+    chLink.title = `YouTube Channel: ${yt.channelName}`;
+    chLink.addEventListener('click', (e) => e.stopPropagation());
+    container.append(chLink);
+    hasPrefix = true;
+  }
+
+  if (yt && yt.publishedAt) {
+    const d = new Date(yt.publishedAt);
+    if (!Number.isNaN(d.getTime())) {
+      const pubText = `published ${d.toLocaleDateString()}`;
+      container.append(document.createTextNode(hasPrefix ? ` · ${pubText}` : pubText));
+    }
+  }
 }
 
 function openDialog({ title, label, value = '', select = null }) {
@@ -252,7 +289,7 @@ function buildEntryCard(entry) {
 
   const meta = document.createElement('div');
   meta.className = 'entry-meta';
-  meta.textContent = entrySubtitle(entry);
+  renderEntrySubtitle(meta, entry);
 
   titleBox.append(a, meta);
   head.append(img, titleBox);

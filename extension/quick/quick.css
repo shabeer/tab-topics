@@ -42,6 +42,15 @@ header {
   text-overflow: ellipsis;
 }
 
+.yt-channel-link {
+  cursor: pointer;
+  color: var(--muted);
+  text-decoration: underline;
+}
+.yt-channel-link:hover {
+  color: var(--accent);
+}
+
 .muted { color: var(--muted); }
 
 #filter {

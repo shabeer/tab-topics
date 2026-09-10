@@ -419,6 +419,25 @@ export function ytMetaFor(state, url) {
   return rec;
 }
 
+// Return the channel URL for a YouTube metadata object or entry.yt.
+// Prefers the handle if present (e.g. https://www.youtube.com/@handle),
+// then the channelId (e.g. https://www.youtube.com/channel/UC...),
+// falling back to search by channelName or the main YouTube home page.
+export function youtubeChannelUrl(yt) {
+  if (!yt || typeof yt !== 'object') return 'https://www.youtube.com/';
+  if (yt.handle) {
+    const handle = String(yt.handle).replace(/^@/, '');
+    return `https://www.youtube.com/@${handle}`;
+  }
+  if (yt.channelId) {
+    return `https://www.youtube.com/channel/${yt.channelId}`;
+  }
+  if (yt.channelName) {
+    return `https://www.youtube.com/results?search_query=${encodeURIComponent(yt.channelName)}`;
+  }
+  return 'https://www.youtube.com/';
+}
+
 // Keep the metadata cache bounded: past `cap` entries, drop the stalest.
 export function pruneYtMeta(state, cap = 500) {
   const map = state.ytMeta;

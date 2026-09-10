@@ -31,6 +31,36 @@ function getTargetTopicId() {
   return noTopic ? noTopic.id : (state.topics[0] ? state.topics[0].id : null);
 }
 
+function renderTabHost(meta = null) {
+  els.host.replaceChildren();
+  const isYt = !!logic.youtubeVideoIdOf(tab.url);
+  const yt = meta || (state ? logic.ytMetaFor(state, tab.url) : null);
+
+  if (!isYt) {
+    try {
+      els.host.textContent = new URL(tab.url).host;
+    } catch {
+      els.host.textContent = tab.url || '';
+    }
+    return;
+  }
+
+  if (yt && yt.channelName) {
+    const chLink = document.createElement('a');
+    chLink.className = 'yt-channel-link';
+    chLink.href = logic.youtubeChannelUrl(yt);
+    chLink.target = '_blank';
+    chLink.rel = 'noopener';
+    chLink.textContent = yt.channelName;
+    chLink.title = `YouTube Channel: ${yt.channelName}`;
+    chLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: chLink.href });
+    });
+    els.host.append(chLink);
+  }
+}
+
 async function init() {
   try {
     tab = await chrome.tabs.get(tabId);
@@ -41,12 +71,14 @@ async function init() {
   state = await loadState(chromeAdapter());
   suggestion = logic.matchUrl(state, tab.url);
   els.title.textContent = tab.title || tab.url || 'Untitled tab';
+  renderTabHost();
 
   // Enrichment is async: the URL-based suggestion is live immediately, and if
   // video metadata arrives (and changes the match) the list re-renders. When
   // the user hasn't interacted yet, the selection follows the new suggestion.
   ensureYtMeta(state, tab.url).then(async (meta) => {
     if (!meta) return;
+    renderTabHost(meta);
     const better = logic.matchUrl(state, tab.url);
     if (better && better.id !== (suggestion && suggestion.id)) {
       suggestion = better;
@@ -58,11 +90,6 @@ async function init() {
     await saveState(chromeAdapter(), state); // persist the cache fill
     render();
   });
-  try {
-    els.host.textContent = new URL(tab.url).host;
-  } catch {
-    els.host.textContent = tab.url || '';
-  }
   els.closeAfter.checked = !!state.settings.closeAfterAdd;
   els.closeAfter.addEventListener('change', async () => {
     state.settings.closeAfterAdd = els.closeAfter.checked;

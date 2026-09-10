@@ -40,6 +40,36 @@ function buildTopicSelect() {
   }
 }
 
+function renderTabHost(meta = null) {
+  els.host.replaceChildren();
+  const isYt = !!logic.youtubeVideoIdOf(tab.url);
+  const yt = meta || (entry && entry.yt) || (state ? logic.ytMetaFor(state, tab.url) : null);
+
+  if (!isYt) {
+    try {
+      els.host.textContent = new URL(tab.url).host;
+    } catch {
+      els.host.textContent = tab.url || '';
+    }
+    return;
+  }
+
+  if (yt && yt.channelName) {
+    const chLink = document.createElement('a');
+    chLink.className = 'yt-channel-link';
+    chLink.href = logic.youtubeChannelUrl(yt);
+    chLink.target = '_blank';
+    chLink.rel = 'noopener';
+    chLink.textContent = yt.channelName;
+    chLink.title = `YouTube Channel: ${yt.channelName}`;
+    chLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: chLink.href });
+    });
+    els.host.append(chLink);
+  }
+}
+
 async function init() {
   try {
     tab = await chrome.tabs.get(tabId);
@@ -53,11 +83,7 @@ async function init() {
   entry = logic.findEntryByUrl(state, tab.url);
 
   els.title.textContent = tab.title || tab.url || 'Untitled tab';
-  try {
-    els.host.textContent = new URL(tab.url).host;
-  } catch {
-    els.host.textContent = tab.url || '';
-  }
+  renderTabHost();
 
   if (!entry) {
     els.pickFirst.hidden = false;
@@ -69,11 +95,17 @@ async function init() {
     // channel rule now matches and the user hasn't picked, rebuild the select.
     ensureYtMeta(state, tab.url).then(async (meta) => {
       if (!meta) return;
+      renderTabHost(meta);
       if (!userPickedTopicId) buildTopicSelect();
       await saveState(chromeAdapter(), state); // persist the cache fill
     });
   } else {
     els.note.value = entry.note || '';
+    ensureYtMeta(state, tab.url).then(async (meta) => {
+      if (!meta) return;
+      renderTabHost(meta);
+      await saveState(chromeAdapter(), state);
+    });
   }
 
   els.note.focus();

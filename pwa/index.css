@@ -377,6 +377,15 @@ th { color: var(--muted); font-weight: 600; }
   margin-top: 2px;
 }
 
+.yt-channel-link {
+  cursor: pointer;
+  color: var(--muted);
+  text-decoration: underline;
+}
+.yt-channel-link:hover {
+  color: var(--accent);
+}
+
 .note-box {
   background: #fffbeb;
   border: 1px solid #fef3c7;
