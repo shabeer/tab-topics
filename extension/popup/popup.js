@@ -207,6 +207,15 @@ async function init() {
     // checkbox reverses the processing order so rightmost tabs file first and
     // land at the top of their queues.
     const orderedRows = els.bulkRtl.checked ? [...rows].reverse() : rows;
+
+    // Ensure metadata is fetched for YouTube URLs before topic determination and saving
+    const ytUrls = orderedRows
+      .map((r) => r.dataset.url)
+      .filter((url) => logic.youtubeVideoIdOf(url));
+    if (ytUrls.length) {
+      await Promise.allSettled(ytUrls.map((url) => ensureYtMeta(state, url)));
+    }
+
     filedTabIds = [];
     for (const row of orderedRows) {
       const tabId = Number(row.dataset.tabId);
@@ -215,26 +224,15 @@ async function init() {
       if (select.value === '') continue;
       const info = { url: row.dataset.url, title: row.dataset.title };
       const suggestion = logic.matchUrl(state, info.url);
-      logic.saveTab(state, info, select.value, suggestion ? suggestion.id : null);
+      const meta = logic.ytMetaFor(state, info.url);
+      const targetTopicId =
+        select.dataset.userModified === 'true'
+          ? select.value
+          : (suggestion ? suggestion.topicId : select.value);
+      logic.saveTab(state, info, targetTopicId, suggestion ? suggestion.id : null, meta);
       filedTabIds.push(tabId);
     }
     await afterStateChange();
-    // Enrich filed YouTube videos after the fact: one fetch each (cache
-    // misses only), then stamp the entries and persist once.
-    const filedUrls = filedTabIds
-      .map((id) => orderedRows.find((r) => Number(r.dataset.tabId) === id))
-      .filter(Boolean)
-      .map((r) => r.dataset.url);
-    let enriched = false;
-    await Promise.allSettled(
-      filedUrls.map(async (url) => {
-        if (await ensureYtMeta(state, url)) enriched = true;
-      })
-    );
-    if (enriched) {
-      logic.backfillYtStamps(state);
-      await saveState(chromeAdapter(), state);
-    }
     if (filedTabIds.length && els.bulkCloseAfter.checked) {
       try { await chrome.tabs.remove(filedTabIds); } catch { /* some may be gone */ }
       filedTabIds = [];
@@ -269,6 +267,32 @@ async function init() {
   renderRecent();
 }
 
+function populateBulkSelect(select, url, initialTopicId = null) {
+  select.replaceChildren();
+  const skip = document.createElement('option');
+  skip.value = '';
+  skip.textContent = '— skip —';
+  select.append(skip);
+
+  const suggestion = logic.matchUrl(state, url);
+  const noTopic = logic.ensureTopic(state, 'NoTopic');
+  const targetTopicId = initialTopicId !== null ? initialTopicId : (suggestion ? suggestion.topicId : noTopic.id);
+
+  for (const topic of state.topics) {
+    const opt = document.createElement('option');
+    opt.value = topic.id;
+    let label = topic.name;
+    if (suggestion && suggestion.topicId === topic.id) {
+      label += ' — suggested';
+    }
+    opt.textContent = label;
+    if (topic.id === targetTopicId) {
+      opt.selected = true;
+    }
+    select.append(opt);
+  }
+}
+
 async function renderBulk() {
   els.bulkList.replaceChildren();
   els.bulkClose.hidden = true;
@@ -300,27 +324,24 @@ async function renderBulk() {
     t.title = tab.url;
 
     const select = document.createElement('select');
-    const skip = document.createElement('option');
-    skip.value = '';
-    skip.textContent = '— skip —';
-    select.append(skip);
+    select.dataset.userModified = 'false';
+    select.addEventListener('change', () => {
+      select.dataset.userModified = 'true';
+    });
 
-    const suggestion = logic.matchUrl(state, tab.url);
-    const noTopic = logic.ensureTopic(state, 'NoTopic');
-    const targetTopicId = suggestion ? suggestion.topicId : noTopic.id;
+    populateBulkSelect(select, tab.url);
 
-    for (const topic of state.topics) {
-      const opt = document.createElement('option');
-      opt.value = topic.id;
-      let label = topic.name;
-      if (suggestion && suggestion.topicId === topic.id) {
-        label += ' — suggested';
-      }
-      opt.textContent = label;
-      if (topic.id === targetTopicId) {
-        opt.selected = true;
-      }
-      select.append(opt);
+    // Enrichment is async: the URL-based suggestion above renders instantly and
+    // the match re-runs once video metadata arrives (channel rules only see the
+    // Data API response). A manual user selection always wins.
+    if (logic.youtubeVideoIdOf(tab.url)) {
+      ensureYtMeta(state, tab.url).then(async (meta) => {
+        if (!meta) return;
+        await saveState(chromeAdapter(), state); // persist the cache fill
+        if (select.dataset.userModified !== 'true') {
+          populateBulkSelect(select, tab.url);
+        }
+      });
     }
 
     row.append(img, t, select);

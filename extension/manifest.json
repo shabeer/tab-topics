@@ -7,7 +7,7 @@
   "permissions": ["tabs", "storage", "favicon", "identity", "alarms"],
   "host_permissions": ["https://www.googleapis.com/*"],
   "oauth2": {
-    "client_id": "YOUR_EXTENSION_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "173240064533-36a0lobbfetbi58hrf3pde6p91f95eho.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/drive.appdata"]
   },
   "background": {

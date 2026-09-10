@@ -655,6 +655,75 @@ test('backfillYtStamps stamps entries enriched after save (bulk path)', () => {
   assert.equal(e.yt.channelName, 'Chan');
 });
 
+test('bulk saving determines topics using YouTube channel and metadata when enriched', async () => {
+  const s = fresh();
+  s.settings.ytApiKey = 'TESTKEY';
+  const scienceTopic = logic.addTopic(s, 'Science');
+  const codingTopic = logic.addTopic(s, 'Coding');
+
+  const rule1 = logic.addRule(s, { type: 'ytChannelName', value: 'Veritasium', topicId: scienceTopic.id });
+  const rule2 = logic.addRule(s, { type: 'ytChannelId', value: UC_A, topicId: codingTopic.id });
+
+  const url1 = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  const url2 = 'https://www.youtube.com/watch?v=oHg5SJYRHA0';
+  const url3 = 'https://example.com/article';
+
+  const counter = fetchCounter((url) => {
+    if (url.includes('dQw4w9WgXcQ')) {
+      return okResponse([apiItem({ id: 'dQw4w9WgXcQ', channelId: UC_A, channelTitle: 'Coding Channel', publishedAt: '2021-05-10T12:00:00Z' })]);
+    }
+    if (url.includes('oHg5SJYRHA0')) {
+      return okResponse([apiItem({ id: 'oHg5SJYRHA0', channelId: 'UC_OTHER_CHANNEL_ID_HERE', channelTitle: 'Veritasium', publishedAt: '2022-08-15T18:30:00Z' })]);
+    }
+    return okResponse([]);
+  });
+
+  // Before enrichment, watch URLs do not match YouTube channel rules
+  assert.equal(logic.matchUrl(s, url1), null);
+  assert.equal(logic.matchUrl(s, url2), null);
+
+  // Bulk enrichment fetches metadata for YouTube URLs
+  const urls = [url1, url2, url3];
+  const ytUrls = urls.filter((u) => logic.youtubeVideoIdOf(u));
+  await Promise.allSettled(ytUrls.map((u) => yt.ensureYtMeta(s, u, { fetchImpl: counter.impl })));
+
+  // After enrichment, topic determination logic matches the rules
+  const suggestion1 = logic.matchUrl(s, url1);
+  assert.ok(suggestion1);
+  assert.equal(suggestion1.topicId, codingTopic.id);
+  assert.equal(suggestion1.id, rule2.id);
+
+  const suggestion2 = logic.matchUrl(s, url2);
+  assert.ok(suggestion2);
+  assert.equal(suggestion2.topicId, scienceTopic.id);
+  assert.equal(suggestion2.id, rule1.id);
+
+  const suggestion3 = logic.matchUrl(s, url3);
+  assert.equal(suggestion3, null);
+
+  // Bulk saving with determined topics and cached metadata
+  const meta1 = logic.ytMetaFor(s, url1);
+  const meta2 = logic.ytMetaFor(s, url2);
+  const meta3 = logic.ytMetaFor(s, url3);
+
+  const res1 = logic.saveTab(s, { url: url1, title: 'Video 1' }, suggestion1.topicId, suggestion1.id, meta1);
+  const res2 = logic.saveTab(s, { url: url2, title: 'Video 2' }, suggestion2.topicId, suggestion2.id, meta2);
+  const res3 = logic.saveTab(s, { url: url3, title: 'Article 3' }, s.topics[0].id, null, meta3);
+
+  assert.equal(res1.entry.topicId, codingTopic.id);
+  assert.equal(res1.entry.suggestedByRuleId, rule2.id);
+  assert.equal(res1.entry.yt.channelId, UC_A);
+  assert.equal(res1.entry.yt.publishedAt, '2021-05-10T12:00:00Z');
+
+  assert.equal(res2.entry.topicId, scienceTopic.id);
+  assert.equal(res2.entry.suggestedByRuleId, rule1.id);
+  assert.equal(res2.entry.yt.channelName, 'Veritasium');
+  assert.equal(res2.entry.yt.publishedAt, '2022-08-15T18:30:00Z');
+
+  assert.equal(res3.entry.topicId, s.topics[0].id);
+  assert.equal(res3.entry.yt, undefined);
+});
+
 // --- export / import with YouTube data ------------------------------------------
 
 test('maskApiKey preserves first and last 4 characters, masking the rest', () => {
