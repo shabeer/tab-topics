@@ -1,4 +1,4 @@
-// Generates the extension icons (16/48/128 px PNGs) with no dependencies:
+// Generates the extension and PWA icons (16/48/128/192/512 px PNGs) with no dependencies:
 // a solid indigo square with three light bars — one per queue.
 // Run: node tools/gen-icons.js   (or: npm run icons)
 
@@ -8,8 +8,10 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const outDir = path.join(root, 'extension', 'icons');
-fs.mkdirSync(outDir, { recursive: true });
+const extOutDir = path.join(root, 'extension', 'icons');
+const pwaOutDir = path.join(root, 'pwa', 'icons');
+fs.mkdirSync(extOutDir, { recursive: true });
+fs.mkdirSync(pwaOutDir, { recursive: true });
 
 const CRC_TABLE = (() => {
   const t = new Int32Array(256);
@@ -77,6 +79,11 @@ function pixel(x, y, n) {
 }
 
 for (const size of [16, 48, 128]) {
-  fs.writeFileSync(path.join(outDir, `icon${size}.png`), png(size, (x, y) => pixel(x, y, size)));
+  fs.writeFileSync(path.join(extOutDir, `icon${size}.png`), png(size, (x, y) => pixel(x, y, size)));
   console.log(`wrote extension/icons/icon${size}.png`);
+}
+
+for (const size of [192, 512]) {
+  fs.writeFileSync(path.join(pwaOutDir, `icon-${size}.png`), png(size, (x, y) => pixel(x, y, size)));
+  console.log(`wrote pwa/icons/icon-${size}.png`);
 }

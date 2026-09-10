@@ -174,6 +174,13 @@ async function confirm(topicId) {
   const meta = await ensureYtMeta(state, tab.url);
   logic.saveTab(state, tab, topicId, suggestion ? suggestion.id : null, meta);
   await saveState(chromeAdapter(), state);
+  try {
+    if (chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }, () => {
+        if (chrome.runtime.lastError) { /* ignore */ }
+      });
+    }
+  } catch {}
   if (els.closeAfter.checked) {
     try { await chrome.tabs.remove(tabId); } catch { /* already gone */ }
   }

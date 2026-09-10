@@ -168,3 +168,16 @@ dialog input, dialog select { width: 100%; font: inherit; padding: 7px 9px; bord
 .dlg-row { display: flex; justify-content: flex-end; gap: 8px; }
 .dlg-row button { font: inherit; padding: 6px 14px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; order: 1; }
 .dlg-row button.primary { order: 0; }
+
+.sync-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.sync-section h3 { margin: 0 0 6px; font-size: 13px; }
+.sync-controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.sync-status-badge {
+  font-size: 11px; padding: 3px 8px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+}
+.sync-status-badge.synced { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.sync-status-badge.syncing { background: #e0e7ff; border-color: #a5b4fc; color: #4338ca; }
+.sync-status-badge.error { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.sync-status-badge.offline { background: #fef3c7; border-color: #fde68a; color: #b45309; }
+

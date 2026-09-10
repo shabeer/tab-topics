@@ -4,6 +4,8 @@
 
 import * as logic from '../shared/logic.js';
 import { chromeAdapter, loadState, saveState } from '../shared/store.js';
+import { loadSyncMeta, saveSyncMeta, performSync } from '../shared/sync-engine.js';
+import { getExtensionAuthToken, removeCachedToken } from '../shared/auth-extension.js';
 
 const QUEUE_LABELS = { to_be_ordered: 'To be ordered', ordered: 'Ordered', done: 'Done' };
 
@@ -35,6 +37,10 @@ const els = {
   ruleAdd: document.getElementById('rule-add'),
   closeAfterSetting: document.getElementById('close-after-setting'),
   ytApiKey: document.getElementById('yt-api-key'),
+  syncAuthBtn: document.getElementById('sync-auth-btn'),
+  syncNowBtn: document.getElementById('sync-now-btn'),
+  syncStatus: document.getElementById('sync-status'),
+  syncDetails: document.getElementById('sync-details'),
   exportBtn: document.getElementById('export-btn'),
   importFile: document.getElementById('import-file'),
   shortcutsLink: document.getElementById('shortcuts-link'),
@@ -642,6 +648,49 @@ function renderRulesPanel() {
 // Settings panel
 // ---------------------------------------------------------------------------
 
+async function updateSyncStatusUI() {
+  const meta = await loadSyncMeta(chromeAdapter());
+  if (!els.syncStatus) return;
+
+  els.syncStatus.className = 'sync-status-badge ' + (meta.status || 'idle');
+  if (!meta.enabled) {
+    els.syncStatus.textContent = 'Disabled';
+    els.syncAuthBtn.textContent = 'Sign in with Google';
+    els.syncAuthBtn.className = 'primary';
+    els.syncNowBtn.hidden = true;
+    els.syncDetails.hidden = true;
+  } else {
+    els.syncAuthBtn.textContent = 'Sign out / Disable sync';
+    els.syncAuthBtn.className = '';
+    els.syncNowBtn.hidden = false;
+    els.syncDetails.hidden = false;
+
+    if (meta.status === 'syncing') {
+      els.syncStatus.textContent = 'Syncing…';
+    } else if (meta.status === 'synced') {
+      const timeStr = meta.lastSyncedAt
+        ? new Date(meta.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : 'recently';
+      els.syncStatus.textContent = `Synced (${timeStr})`;
+    } else if (meta.status === 'offline') {
+      els.syncStatus.textContent = 'Offline (changes saved locally)';
+    } else if (meta.status === 'error') {
+      els.syncStatus.textContent = 'Sync error';
+    } else {
+      els.syncStatus.textContent = 'Enabled';
+    }
+
+    const details = [];
+    if (meta.lastSyncedAt) {
+      details.push(`Last synced: ${new Date(meta.lastSyncedAt).toLocaleString()}`);
+    }
+    if (meta.lastError) {
+      details.push(`Error: ${meta.lastError}`);
+    }
+    els.syncDetails.textContent = details.join(' · ') || 'Sync is active.';
+  }
+}
+
 function renderSettingsPanel() {
   els.closeAfterSetting.checked = !!state.settings.closeAfterAdd;
   // Only reflect into the field when it isn't focused, so a render triggered
@@ -649,6 +698,7 @@ function renderSettingsPanel() {
   if (document.activeElement !== els.ytApiKey) {
     els.ytApiKey.value = state.settings.ytApiKey || '';
   }
+  updateSyncStatusUI();
 }
 
 // ---------------------------------------------------------------------------
@@ -791,6 +841,55 @@ async function init() {
     } catch (err) {
       window.alert(`Import failed: ${err.message}`);
     }
+  });
+
+  els.syncAuthBtn.addEventListener('click', async () => {
+    const meta = await loadSyncMeta(chromeAdapter());
+    if (meta.enabled) {
+      meta.enabled = false;
+      meta.status = 'idle';
+      await saveSyncMeta(chromeAdapter(), meta);
+      await updateSyncStatusUI();
+    } else {
+      els.syncStatus.textContent = 'Authenticating…';
+      try {
+        const token = await getExtensionAuthToken({ interactive: true });
+        if (token) {
+          meta.enabled = true;
+          await saveSyncMeta(chromeAdapter(), meta);
+          await updateSyncStatusUI();
+          const res = await performSync({
+            adapter: chromeAdapter(),
+            getToken: getExtensionAuthToken,
+            interactive: false,
+          });
+          if (res.ok) {
+            state = await loadState(chromeAdapter());
+            render();
+          }
+          await updateSyncStatusUI();
+        }
+      } catch (err) {
+        window.alert(`Google authentication failed: ${err.message}`);
+        await updateSyncStatusUI();
+      }
+    }
+  });
+
+  els.syncNowBtn.addEventListener('click', async () => {
+    els.syncStatus.textContent = 'Syncing…';
+    const res = await performSync({
+      adapter: chromeAdapter(),
+      getToken: getExtensionAuthToken,
+      interactive: true,
+    });
+    if (res.ok) {
+      state = await loadState(chromeAdapter());
+      render();
+    } else {
+      window.alert(`Sync failed: ${res.error || 'Unknown error'}`);
+    }
+    await updateSyncStatusUI();
   });
 
   els.shortcutsLink.addEventListener('click', (e) => {

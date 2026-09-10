@@ -153,6 +153,15 @@ async function afterStateChange() {
   await saveState(chromeAdapter(), state);
   renderRecent();
   renderSearch();
+  try {
+    if (chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }, () => {
+        if (chrome.runtime.lastError) { /* ignore if background not listening */ }
+      });
+    }
+  } catch {
+    // Ignore message passing errors
+  }
 }
 
 async function init() {

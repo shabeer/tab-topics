@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Save to Tab Topics</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="stylesheet" href="index.css">
+  <style>
+    .share-container {
+      max-width: 480px;
+      margin: 20px auto;
+      padding: 16px;
+    }
+    .share-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }
+    .share-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+    .share-url {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      word-break: break-all;
+    }
+    .yt-badge {
+      display: inline-block;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: inherit;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .form-group textarea {
+      height: 60px;
+    }
+    .action-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .action-row button {
+      flex: 1;
+      padding: 12px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="share-container">
+    <div class="share-card">
+      <div id="share-title" class="share-title">Loading shared tab…</div>
+      <div id="share-url" class="share-url"></div>
+      <div id="yt-info" class="yt-badge" hidden></div>
+
+      <form id="share-form">
+        <div class="form-group">
+          <label for="share-topic">Topic</label>
+          <select id="share-topic"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="share-note">Note (optional)</label>
+          <textarea id="share-note" placeholder="Add custom note…"></textarea>
+        </div>
+
+        <div class="action-row">
+          <button type="submit" id="save-btn" class="primary">Save Tab</button>
+          <button type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="share-receive.js"></script>
+</body>
+</html>

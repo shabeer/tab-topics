@@ -61,6 +61,19 @@
       Import merges: new topics/entries/rules are added; on URL conflicts the local entry wins.
       Keyboard bindings live in Chrome itself and cannot be exported by the extension.
     </p>
+    <div class="panel-section sync-section">
+      <h3>Cross-Device Sync (Google Drive)</h3>
+      <p class="panel-hint">
+        Sync topics, queues, notes, rules, and settings across devices (including Android Chrome PWA)
+        via your private Google Drive appDataFolder.
+      </p>
+      <div class="panel-row sync-controls">
+        <button id="sync-auth-btn" class="primary">Sign in with Google</button>
+        <button id="sync-now-btn" hidden>Sync now</button>
+        <span id="sync-status" class="sync-status-badge">Disabled</span>
+      </div>
+      <div id="sync-details" class="panel-hint" hidden></div>
+    </div>
   </div>
 
   <div id="layout">

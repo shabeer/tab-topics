@@ -4,8 +4,12 @@
   "short_name": "Tab Topics",
   "version": "0.2.0",
   "description": "Save tabs into topics with to_be_ordered / ordered / done queues, per-entry notes, rule-based topic suggestions, search, and JSON export/import.",
-  "permissions": ["tabs", "storage", "favicon"],
+  "permissions": ["tabs", "storage", "favicon", "identity", "alarms"],
   "host_permissions": ["https://www.googleapis.com/*"],
+  "oauth2": {
+    "client_id": "YOUR_EXTENSION_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/drive.appdata"]
+  },
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"

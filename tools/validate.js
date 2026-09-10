@@ -1,8 +1,8 @@
 // Build/validation step ("npm run build"). There is no compilation in a
 // vanilla MV3 extension, so "build" means: the manifest parses, every file it
-// references exists, every JS file parses as an ES module, the pure shared
-// modules import cleanly, and every local asset referenced by the HTML files
-// exists.
+// references exists, every JS file in extension/ and pwa/ parses as an ES module,
+// the pure shared modules import cleanly, and every local asset referenced by
+// the HTML files exists.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const extDir = path.join(root, 'extension');
+const pwaDir = path.join(root, 'pwa');
 let failures = 0;
 const fail = (msg) => {
   failures++;
@@ -41,15 +42,27 @@ for (const ref of referenced) {
 const suggested = Object.values(manifest.commands || {}).filter((c) => c.suggested_key).length;
 if (suggested > 4) fail(`${suggested} commands declare suggested_key; Chrome allows at most 4`);
 
-// --- JS syntax (parse each as an ES module via a temp .mjs copy) ---
+// Validate manifest permissions
+const expectedPerms = ['tabs', 'storage', 'favicon', 'identity', 'alarms'];
+for (const p of expectedPerms) {
+  if (!manifest.permissions?.includes(p)) fail(`manifest missing expected permission: ${p}`);
+}
+if (!manifest.oauth2 || !manifest.oauth2.scopes?.includes('https://www.googleapis.com/auth/drive.appdata')) {
+  fail('manifest missing oauth2 drive.appdata scope configuration');
+}
+
+// --- JS syntax (parse each as an ES module via a temp .mjs copy) across extension/ and pwa/ ---
 const jsFiles = [];
-(function walk(dir) {
+function walkJs(dir) {
+  if (!fs.existsSync(dir)) return;
   for (const name of fs.readdirSync(dir)) {
     const p = path.join(dir, name);
-    if (fs.statSync(p).isDirectory()) walk(p);
+    if (fs.statSync(p).isDirectory()) walkJs(p);
     else if (p.endsWith('.js')) jsFiles.push(p);
   }
-})(extDir);
+}
+walkJs(extDir);
+walkJs(pwaDir);
 
 for (const file of jsFiles) {
   const tmp = path.join(fs.realpathSync(fs.mkdtempSync('tt-validate-')), 'check.mjs');
@@ -62,6 +75,10 @@ for (const file of jsFiles) {
 // --- shared modules import & behave ---
 const logic = await import(pathToFileURL(path.join(extDir, 'shared', 'logic.js')));
 const store = await import(pathToFileURL(path.join(extDir, 'shared', 'store.js')));
+const sync = await import(pathToFileURL(path.join(extDir, 'shared', 'sync.js')));
+const drive = await import(pathToFileURL(path.join(extDir, 'shared', 'drive.js')));
+const syncEngine = await import(pathToFileURL(path.join(extDir, 'shared', 'sync-engine.js')));
+
 const s = logic.newState();
 if (
   s.schemaVersion !== 1 ||
@@ -77,15 +94,24 @@ if (loaded.schemaVersion !== 1) fail('loadState on empty adapter failed');
 await store.saveState(adapter, loaded);
 if ((await adapter.get()).schemaVersion !== 1) fail('saveState round-trip failed');
 
-// --- HTML-local assets ---
+// Verify sync engine methods exist
+if (typeof sync.mergeStates !== 'function') fail('sync.mergeStates is missing');
+if (typeof drive.findOrCreateSyncFile !== 'function') fail('drive.findOrCreateSyncFile is missing');
+if (typeof syncEngine.performSync !== 'function') fail('syncEngine.performSync is missing');
+
+// --- HTML-local assets across extension/ and pwa/ ---
 const htmlFiles = [];
-(function walkHtml(dir) {
+function walkHtml(dir) {
+  if (!fs.existsSync(dir)) return;
   for (const name of fs.readdirSync(dir)) {
     const p = path.join(dir, name);
     if (fs.statSync(p).isDirectory()) walkHtml(p);
     else if (p.endsWith('.html')) htmlFiles.push(p);
   }
-})(extDir);
+}
+walkHtml(extDir);
+walkHtml(pwaDir);
+
 for (const file of htmlFiles) {
   const text = fs.readFileSync(file, 'utf8');
   const assets = [...text.matchAll(/(?:src|href)="([^"]+)"/g)]

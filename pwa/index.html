@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Tab Topics</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#3b82f6">
+  <link rel="stylesheet" href="index.css">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+</head>
+<body>
+  <header id="topbar">
+    <div class="top-row">
+      <h1 class="logo">Tab Topics</h1>
+      <div class="top-actions">
+        <button id="sync-quick-btn" class="icon-btn sync-btn" title="Sync Status">
+          <span id="sync-badge" class="sync-dot"></span>
+        </button>
+        <button id="toggle-rules" class="icon-btn" title="Rules">⚙ Rules</button>
+        <button id="toggle-settings" class="icon-btn" title="Settings">☰ Settings</button>
+      </div>
+    </div>
+    <div class="search-row">
+      <input id="global-search" type="search" placeholder="Search notes, titles, URLs, topics…">
+    </div>
+  </header>
+
+  <!-- Quick Add Bar -->
+  <section id="quick-add-bar" class="card quick-add">
+    <form id="quick-add-form" class="quick-add-row">
+      <input id="quick-add-url" type="url" placeholder="Paste URL to save…" required autocomplete="off">
+      <select id="quick-add-topic"></select>
+      <button type="submit" class="primary">Add</button>
+    </form>
+    <div id="quick-add-status" class="status-msg" hidden></div>
+  </section>
+
+  <!-- Rules Panel -->
+  <div id="rules-panel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>Topic Suggestion Rules</h2>
+      <button class="close-panel-btn" data-target="rules-panel">✕</button>
+    </div>
+    <p class="panel-hint">
+      Rules suggest a topic when you share or save a tab. First matching rule wins.
+    </p>
+    <div class="table-wrap">
+      <table id="rules-table">
+        <thead>
+          <tr><th>Match</th><th>Value</th><th>Topic</th><th>On</th><th></th></tr>
+        </thead>
+        <tbody id="rules-body"></tbody>
+      </table>
+    </div>
+    <div class="panel-row add-rule-row">
+      <select id="rule-type">
+        <option value="domain">Domain</option>
+        <option value="urlPattern">URL pattern</option>
+        <option value="ytChannelName">YTChannelName</option>
+        <option value="ytChannelId">YTChannelID</option>
+      </select>
+      <input id="rule-value" type="text" placeholder="e.g. example.com">
+      <select id="rule-topic"></select>
+      <button id="rule-add" class="primary">Add rule</button>
+    </div>
+  </div>
+
+  <!-- Settings Panel -->
+  <div id="settings-panel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>Settings & Sync</h2>
+      <button class="close-panel-btn" data-target="settings-panel">✕</button>
+    </div>
+
+    <!-- Sync section -->
+    <div class="settings-group">
+      <h3>Cross-Device Sync (Google Drive)</h3>
+      <p class="panel-hint">
+        Syncs state across desktop extension and mobile PWA via Google Drive appDataFolder.
+      </p>
+      <div class="panel-row sync-row">
+        <button id="sync-auth-btn" class="primary">Sign in with Google</button>
+        <button id="sync-now-btn" hidden>Sync now</button>
+        <span id="sync-status" class="sync-status-badge">Disabled</span>
+      </div>
+      <div id="sync-details" class="panel-hint sync-details-box" hidden></div>
+    </div>
+
+    <!-- YouTube API Key section -->
+    <div class="settings-group">
+      <h3>YouTube Video Enrichment</h3>
+      <p class="panel-hint">
+        Enriches YouTube videos with channel name, ID, and publish date for rules and search.
+        (Syncs automatically with desktop if configured there).
+      </p>
+      <div class="panel-row">
+        <input id="yt-api-key" type="password" placeholder="YouTube Data API key" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <!-- Export & Import section -->
+    <div class="settings-group">
+      <h3>Backup & Restore</h3>
+      <div class="panel-row">
+        <button id="export-btn">Export JSON</button>
+        <label class="import-label">Import JSON…
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Topic Selector Bar -->
+  <nav id="topic-nav" class="topic-bar">
+    <div class="topic-chips-wrapper">
+      <ul id="topic-chips" class="chips-list"></ul>
+    </div>
+    <button id="new-topic-btn" class="icon-btn add-topic-btn" title="Create Topic">+ New</button>
+  </nav>
+
+  <!-- Main View: Queue Tabs & Entries List -->
+  <main id="main-content">
+    <!-- Queue Selector Tabs -->
+    <div id="queue-tabs" class="queue-tabs-bar">
+      <button class="queue-tab active" data-queue="to_be_ordered">
+        To be ordered <span class="badge" id="count-to_be_ordered">0</span>
+      </button>
+      <button class="queue-tab" data-queue="ordered">
+        Ordered <span class="badge" id="count-ordered">0</span>
+      </button>
+      <button class="queue-tab" data-queue="done">
+        Done <span class="badge" id="count-done">0</span>
+      </button>
+    </div>
+
+    <div class="topic-actions-bar">
+      <span id="cur-topic-heading" class="topic-title">NoTopic</span>
+      <div class="topic-btns">
+        <button id="rename-topic-btn" class="linkish">Rename</button>
+        <button id="delete-topic-btn" class="linkish danger">Delete</button>
+      </div>
+    </div>
+
+    <!-- Active Queue Entries Container -->
+    <div id="entries-container" class="entries-list"></div>
+  </main>
+
+  <!-- Dialog for inputs/prompts -->
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form">
+      <h3 id="dlg-title"></h3>
+      <label id="dlg-label" for="dlg-input"></label>
+      <input id="dlg-input" type="text" autocomplete="off">
+      <select id="dlg-select" hidden></select>
+      <div class="dlg-row">
+        <button value="ok" class="primary">OK</button>
+        <button value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="index.js"></script>
+</body>
+</html>
