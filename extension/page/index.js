@@ -90,6 +90,15 @@ function entrySubtitle(entry) {
 async function persistAndRender() {
   await saveState(chromeAdapter(), state);
   render();
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }, () => {
+        if (chrome.runtime.lastError) { /* ignore if background worker not active */ }
+      });
+    }
+  } catch {
+    // Ignore message passing errors
+  }
 }
 
 function openDialog({ title, label, value = '', select = null }) {
@@ -800,11 +809,25 @@ async function init() {
   els.closeAfterSetting.addEventListener('change', async () => {
     state.settings.closeAfterAdd = els.closeAfterSetting.checked;
     await saveState(chromeAdapter(), state);
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }, () => {
+          if (chrome.runtime.lastError) { /* ignore */ }
+        });
+      }
+    } catch {}
   });
 
   els.ytApiKey.addEventListener('change', async () => {
     state.settings.ytApiKey = els.ytApiKey.value.trim();
     await saveState(chromeAdapter(), state);
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ type: 'TRIGGER_SYNC' }, () => {
+          if (chrome.runtime.lastError) { /* ignore */ }
+        });
+      }
+    } catch {}
   });
 
   els.exportBtn.addEventListener('click', () => {
@@ -896,6 +919,17 @@ async function init() {
     e.preventDefault();
     chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
   });
+
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && (changes.tabTopicsState || changes.tabTopicsSyncMeta)) {
+        loadState(chromeAdapter()).then((s) => {
+          state = s;
+          render();
+        });
+      }
+    });
+  }
 }
 
 init();

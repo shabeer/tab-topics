@@ -374,4 +374,150 @@ describe('high-level sync engine (sync-engine.js)', () => {
     assert.equal(updatedMeta.status, 'synced');
     assert.equal(updatedMeta.lastRemoteRevision, 'r2');
   });
+
+  it('removes tab entry on second device when deleted on first device and synced', async () => {
+    // Device A setup
+    const adapterA = memoryAdapter();
+    const stateA = await loadState(adapterA);
+    const metaA = syncEngine.defaultSyncMeta();
+    metaA.enabled = true;
+    metaA.deviceId = 'dev_chrome_A';
+    await syncEngine.saveSyncMeta(adapterA, metaA);
+
+    const generalA = logic.findTopicByName(stateA, 'General');
+    const { entry } = logic.saveTab(stateA, { url: 'https://example.org/doc', title: 'Example Doc' }, generalA.id);
+    await saveState(adapterA, stateA);
+
+    // Simulated Google Drive cloud storage
+    let cloudData = null;
+    let cloudRev = 1;
+
+    const mockFetch = async (url, opts) => {
+      if (url.includes('/files?spaces=appDataFolder')) {
+        return { ok: true, json: async () => ({ files: [{ id: 'sync_file_1', name: 'tabtopics-state.json' }] }) };
+      }
+      if (url.includes('/files/sync_file_1?alt=media')) {
+        return {
+          ok: true,
+          headers: new Map([['date', new Date().toUTCString()]]),
+          json: async () => cloudData,
+        };
+      }
+      if (url.includes('/files/sync_file_1?fields=')) {
+        return { ok: true, json: async () => ({ id: 'sync_file_1', headRevisionId: `rev_${cloudRev}` }) };
+      }
+      if (url.includes('/upload/drive/v3/files/sync_file_1')) {
+        cloudData = JSON.parse(opts.body);
+        cloudRev++;
+        return {
+          ok: true,
+          headers: new Map([['date', new Date().toUTCString()]]),
+          json: async () => ({ id: 'sync_file_1', headRevisionId: `rev_${cloudRev}` }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    // 1. Device A syncs
+    const resA1 = await syncEngine.performSync({
+      adapter: adapterA,
+      getToken: async () => 'token_A',
+      fetchImpl: mockFetch,
+    });
+    assert.equal(resA1.ok, true);
+
+    // 2. Device B setup & first sync
+    const adapterB = memoryAdapter();
+    const stateB = await loadState(adapterB);
+    const metaB = syncEngine.defaultSyncMeta();
+    metaB.enabled = true;
+    metaB.deviceId = 'dev_chrome_B';
+    await syncEngine.saveSyncMeta(adapterB, metaB);
+
+    const resB1 = await syncEngine.performSync({
+      adapter: adapterB,
+      getToken: async () => 'token_B',
+      fetchImpl: mockFetch,
+    });
+    assert.equal(resB1.ok, true);
+
+    const loadedB1 = await loadState(adapterB);
+    const generalB = logic.findTopicByName(loadedB1, 'General');
+    const entriesB1 = logic.entriesInQueue(loadedB1, generalB.id, 'to_be_ordered');
+    assert.equal(entriesB1.length, 1);
+    assert.equal(entriesB1[0].url, 'https://example.org/doc');
+
+    // 3. User deletes the entry on Device A
+    const loadedA = await loadState(adapterA);
+    assert.equal(logic.deleteEntry(loadedA, entry.id), true);
+    await saveState(adapterA, loadedA);
+    assert.equal(logic.entriesInQueue(loadedA, generalA.id, 'to_be_ordered').length, 0);
+
+    // 4. Device A syncs deletion to Google Drive
+    const resA2 = await syncEngine.performSync({
+      adapter: adapterA,
+      getToken: async () => 'token_A',
+      fetchImpl: mockFetch,
+    });
+    assert.equal(resA2.ok, true);
+
+    // 5. Device B syncs from Google Drive
+    const resB2 = await syncEngine.performSync({
+      adapter: adapterB,
+      getToken: async () => 'token_B',
+      fetchImpl: mockFetch,
+    });
+    assert.equal(resB2.ok, true);
+
+    // 6. Verify entry / tab card is removed on Device B
+    const loadedB2 = await loadState(adapterB);
+    const entriesB2 = logic.entriesInQueue(loadedB2, generalB.id, 'to_be_ordered');
+    assert.equal(entriesB2.length, 0);
+  });
+
+  it('normalizes topic IDs across devices with different generated IDs so deletions sync', () => {
+    const stateA = {
+      schemaVersion: 1,
+      topics: [
+        { id: 'top_notopic_A', name: 'NoTopic', createdAt: 100 },
+        { id: 'top_general_A', name: 'General', createdAt: 100 },
+      ],
+      entries: [],
+      rules: [],
+      settings: {},
+    };
+    const e = logic.saveTab(stateA, { url: 'https://test.example/page', title: 'Page' }, 'top_general_A').entry;
+
+    // Device A initial sync
+    const resA1 = sync.mergeStates(null, stateA, null);
+    let baseA = resA1.mergedState;
+    let drive = resA1.mergedState;
+
+    // Device B with different topic IDs
+    const stateB = {
+      schemaVersion: 1,
+      topics: [
+        { id: 'top_notopic_B', name: 'NoTopic', createdAt: 100 },
+        { id: 'top_general_B', name: 'General', createdAt: 100 },
+      ],
+      entries: [],
+      rules: [],
+      settings: {},
+    };
+    const resB1 = sync.mergeStates(null, stateB, drive);
+    let baseB = resB1.mergedState;
+    let localB = resB1.mergedState;
+    drive = resB1.mergedState;
+
+    // Device A deletes the tab entry
+    logic.deleteEntry(stateA, e.id);
+    const resA2 = sync.mergeStates(baseA, stateA, drive);
+    drive = resA2.mergedState;
+
+    // Device B syncs
+    const resB2 = sync.mergeStates(baseB, localB, drive);
+    const canonicalGeneral = resB2.mergedState.topics.find((t) => t.name.toLowerCase() === 'general');
+    const entries = logic.entriesInQueue(resB2.mergedState, canonicalGeneral.id, 'to_be_ordered');
+    assert.equal(entries.length, 0);
+  });
 });

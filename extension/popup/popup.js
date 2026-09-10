@@ -14,6 +14,7 @@ const els = {
   bulkApply: document.getElementById('bulk-apply'),
   bulkClose: document.getElementById('bulk-close'),
   bulkCloseAfter: document.getElementById('bulk-close-after'),
+  bulkSkipAll: document.getElementById('bulk-skip-all'),
   bulkRtl: document.getElementById('bulk-rtl'),
   search: document.getElementById('search'),
   results: document.getElementById('results'),
@@ -251,6 +252,22 @@ async function init() {
     els.bulkArea.hidden = true;
   });
 
+  els.bulkSkipAll.addEventListener('change', () => {
+    const isSkip = els.bulkSkipAll.checked;
+    const rows = els.bulkList.querySelectorAll('.bulk-row');
+    for (const row of rows) {
+      const select = row.querySelector('select');
+      if (!select) continue;
+      if (isSkip) {
+        select.value = '';
+        select.dataset.userModified = 'false';
+      } else {
+        select.dataset.userModified = 'false';
+        populateBulkSelect(select, row.dataset.url);
+      }
+    }
+  });
+
   els.search.addEventListener('input', renderSearch);
 
   els.openManager.addEventListener('click', (e) => {
@@ -263,6 +280,18 @@ async function init() {
     chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
     window.close();
   });
+
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.tabTopicsState) {
+        loadState(chromeAdapter()).then((s) => {
+          state = s;
+          renderRecent();
+          renderSearch();
+        });
+      }
+    });
+  }
 
   renderRecent();
 }
@@ -296,6 +325,7 @@ function populateBulkSelect(select, url, initialTopicId = null) {
 async function renderBulk() {
   els.bulkList.replaceChildren();
   els.bulkClose.hidden = true;
+  if (els.bulkSkipAll) els.bulkSkipAll.checked = false;
   const tabs = await chrome.tabs.query({ currentWindow: true });
   const candidates = tabs.filter(
     (t) => t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('devtools://')
@@ -327,6 +357,10 @@ async function renderBulk() {
     select.dataset.userModified = 'false';
     select.addEventListener('change', () => {
       select.dataset.userModified = 'true';
+      if (els.bulkSkipAll) {
+        const allSelects = [...els.bulkList.querySelectorAll('.bulk-row select')];
+        els.bulkSkipAll.checked = allSelects.length > 0 && allSelects.every((s) => s.value === '');
+      }
     });
 
     populateBulkSelect(select, tab.url);
@@ -338,7 +372,7 @@ async function renderBulk() {
       ensureYtMeta(state, tab.url).then(async (meta) => {
         if (!meta) return;
         await saveState(chromeAdapter(), state); // persist the cache fill
-        if (select.dataset.userModified !== 'true') {
+        if (select.dataset.userModified !== 'true' && (!els.bulkSkipAll || !els.bulkSkipAll.checked)) {
           populateBulkSelect(select, tab.url);
         }
       });

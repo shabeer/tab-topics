@@ -813,3 +813,25 @@ test('search also covers the YouTube channel name', () => {
   assert.deepEqual(logic.searchEntries(s, 'veritasium').map((r) => r.entry.url), [WATCH]);
   assert.deepEqual(logic.searchEntries(s, 'published'), []);
 });
+
+test('bulk filing skips tabs when topic selection is empty string', () => {
+  const s = fresh();
+  const t = s.topics[0];
+  const rows = [
+    { url: 'https://example.com/1', title: 'T1', selectValue: t.id },
+    { url: 'https://example.com/2', title: 'T2', selectValue: '' }, // skipped
+    { url: 'https://example.com/3', title: 'T3', selectValue: t.id },
+  ];
+
+  const filed = [];
+  for (const row of rows) {
+    if (row.selectValue === '') continue;
+    logic.saveTab(s, { url: row.url, title: row.title }, row.selectValue);
+    filed.push(row.url);
+  }
+
+  assert.deepEqual(filed, ['https://example.com/1', 'https://example.com/3']);
+  const inQueue = logic.entriesInQueue(s, t.id, 'to_be_ordered');
+  assert.equal(inQueue.length, 2);
+  assert.equal(logic.findEntryByUrl(s, 'https://example.com/2'), null);
+});

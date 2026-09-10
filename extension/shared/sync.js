@@ -81,12 +81,12 @@ function isRecordModified(current, base) {
 
   const curTime = (isTombstone(current) ? current.deletedAt : current.updatedAt) || 0;
   const baseTime = (isTombstone(base) ? base.deletedAt : base.updatedAt) || 0;
-  if (curTime !== baseTime) return true;
+  if (curTime !== baseTime && curTime !== 0 && baseTime !== 0) return true;
 
   // Shallow comparison of key fields
   const keys = new Set([...Object.keys(current), ...Object.keys(base)]);
   for (const k of keys) {
-    if (k === 'updatedAt' || k === 'deviceId' || k === 'batchId') continue;
+    if (k === 'updatedAt' || k === 'deviceId' || k === 'batchId' || k === 'position') continue;
     if (JSON.stringify(current[k]) !== JSON.stringify(base[k])) return true;
   }
   return false;
@@ -199,9 +199,9 @@ export function reindexQueues(entries, topics) {
 
 // 3-way merge for complete state objects
 export function mergeStates(baseSnapshot, localState, remoteState, { nowMs = Date.now() } = {}) {
-  const base = baseSnapshot || { topics: [], entries: [], rules: [], settings: {} };
-  const local = localState || { topics: [], entries: [], rules: [], settings: {} };
-  const remote = remoteState || { topics: [], entries: [], rules: [], settings: {} };
+  const base = JSON.parse(JSON.stringify(baseSnapshot || { topics: [], entries: [], rules: [], settings: {} }));
+  const local = JSON.parse(JSON.stringify(localState || { topics: [], entries: [], rules: [], settings: {} }));
+  const remote = JSON.parse(JSON.stringify(remoteState || { topics: [], entries: [], rules: [], settings: {} }));
 
   // 1. Merge topics
   const { result: rawTopics, conflicts: topicConflicts } = mergeCollection(
@@ -233,6 +233,19 @@ export function mergeStates(baseSnapshot, localState, remoteState, { nowMs = Dat
     }
   }
 
+  // Also map any topic IDs present in base, local, or remote by name to their canonical topic
+  const allTopicSources = [...(local.topics || []), ...(remote.topics || []), ...(base.topics || [])];
+  for (const t of allTopicSources) {
+    if (isTombstone(t) || !t.name) continue;
+    const cleanName = String(t.name || '').trim().toLowerCase();
+    const canonical = canonicalTopics.find(
+      (x) => !isTombstone(x) && String(x.name || '').trim().toLowerCase() === cleanName
+    );
+    if (canonical && t.id !== canonical.id) {
+      idRemap.set(t.id, canonical.id);
+    }
+  }
+
   // Invariant: NoTopic must exist and be at index 0 among active topics
   const activeTopics = canonicalTopics.filter((t) => !isTombstone(t));
   let noTopic = activeTopics.find((t) => t.name && t.name.toLowerCase() === 'notopic');
@@ -258,6 +271,22 @@ export function mergeStates(baseSnapshot, localState, remoteState, { nowMs = Dat
   }
   topics = canonicalTopics;
 
+  // Remap topic IDs in base, local, and remote BEFORE merging rules and entries
+  for (const list of [base.rules, local.rules, remote.rules]) {
+    for (const r of (list || [])) {
+      if (!isTombstone(r) && idRemap.has(r.topicId)) {
+        r.topicId = idRemap.get(r.topicId);
+      }
+    }
+  }
+  for (const list of [base.entries, local.entries, remote.entries]) {
+    for (const e of (list || [])) {
+      if (!isTombstone(e) && idRemap.has(e.topicId)) {
+        e.topicId = idRemap.get(e.topicId);
+      }
+    }
+  }
+
   // 2. Merge rules
   const { result: rawRules, conflicts: ruleConflicts } = mergeCollection(
     base.rules || [],
@@ -265,11 +294,6 @@ export function mergeStates(baseSnapshot, localState, remoteState, { nowMs = Dat
     remote.rules || []
   );
   const rules = pruneTombstones(rawRules, nowMs);
-  for (const r of rules) {
-    if (idRemap.has(r.topicId)) {
-      r.topicId = idRemap.get(r.topicId);
-    }
-  }
 
   // 3. Merge entries
   const { result: rawEntries, conflicts: entryConflicts } = mergeCollection(
@@ -278,11 +302,6 @@ export function mergeStates(baseSnapshot, localState, remoteState, { nowMs = Dat
     remote.entries || []
   );
   let entries = pruneTombstones(rawEntries, nowMs);
-  for (const e of entries) {
-    if (idRemap.has(e.topicId)) {
-      e.topicId = idRemap.get(e.topicId);
-    }
-  }
 
   // Reindex entries across all active topics and queues
   entries = reindexQueues(entries, topics);

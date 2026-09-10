@@ -5,6 +5,10 @@
 export const QUEUES = ['to_be_ordered', 'ordered', 'done'];
 export const RULE_TYPES = ['domain', 'urlPattern', 'ytChannel', 'ytChannelId', 'ytChannelName'];
 
+export function isTombstone(item) {
+  return !!(item && item._deleted === true);
+}
+
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
@@ -33,7 +37,7 @@ export function newState() {
 export function addTopic(state, name) {
   const clean = String(name || '').trim();
   if (!clean) return null;
-  if (state.topics.some((t) => t.name.toLowerCase() === clean.toLowerCase())) return null;
+  if (state.topics.some((t) => !isTombstone(t) && t.name.toLowerCase() === clean.toLowerCase())) return null;
   const topic = { id: uid(), name: clean, createdAt: Date.now() };
   if (clean.toLowerCase() === 'notopic') {
     state.topics.unshift(topic);
@@ -45,7 +49,7 @@ export function addTopic(state, name) {
 
 export function findTopicByName(state, name) {
   const clean = String(name || '').trim().toLowerCase();
-  return state.topics.find((t) => t.name.toLowerCase() === clean) || null;
+  return state.topics.find((t) => !isTombstone(t) && t.name.toLowerCase() === clean) || null;
 }
 
 // Find-or-create a topic by name (case-insensitive). Used for the NoTopic
@@ -58,9 +62,9 @@ export function ensureTopic(state, name) {
 
 export function renameTopic(state, topicId, name) {
   const clean = String(name || '').trim();
-  const topic = state.topics.find((t) => t.id === topicId);
+  const topic = state.topics.find((t) => !isTombstone(t) && t.id === topicId);
   if (!topic || !clean) return false;
-  if (state.topics.some((t) => t.id !== topicId && t.name.toLowerCase() === clean.toLowerCase())) {
+  if (state.topics.some((t) => !isTombstone(t) && t.id !== topicId && t.name.toLowerCase() === clean.toLowerCase())) {
     return false;
   }
   topic.name = clean;
@@ -71,14 +75,15 @@ export function renameTopic(state, topicId, name) {
 // (spec §4.1). Rules that pointed at the deleted topic are removed.
 export function deleteTopic(state, topicId, moveToTopicId) {
   if (!moveToTopicId || moveToTopicId === topicId) return { ok: false, reason: 'missing-move-target' };
-  if (state.topics.length <= 1) return { ok: false, reason: 'last-topic' };
-  if (!state.topics.some((t) => t.id === moveToTopicId)) return { ok: false, reason: 'bad-target' };
+  const activeTopics = state.topics.filter((t) => !isTombstone(t));
+  if (activeTopics.length <= 1) return { ok: false, reason: 'last-topic' };
+  if (!activeTopics.some((t) => t.id === moveToTopicId)) return { ok: false, reason: 'bad-target' };
 
-  const moving = state.entries.filter((e) => e.topicId === topicId);
+  const moving = state.entries.filter((e) => !isTombstone(e) && e.topicId === topicId);
   for (const entry of moving) {
     entry.topicId = moveToTopicId;
     entry.position = state.entries.filter(
-      (e) => e.topicId === moveToTopicId && e.queue === entry.queue
+      (e) => !isTombstone(e) && e.topicId === moveToTopicId && e.queue === entry.queue
     ).length;
   }
   state.topics = state.topics.filter((t) => t.id !== topicId);
@@ -96,12 +101,12 @@ export function normalizeUrl(url) {
 
 export function findEntryByUrl(state, url) {
   const clean = normalizeUrl(url);
-  return state.entries.find((e) => e.url === clean) || null;
+  return state.entries.find((e) => !isTombstone(e) && e.url === clean) || null;
 }
 
 function listFor(state, topicId, queue) {
   return state.entries
-    .filter((e) => e.topicId === topicId && e.queue === queue)
+    .filter((e) => !isTombstone(e) && e.topicId === topicId && e.queue === queue)
     .sort((a, b) => a.position - b.position);
 }
 
@@ -118,7 +123,7 @@ export function entriesInQueue(state, topicId, queue) {
 export function topicCounts(state, topicId) {
   const counts = { to_be_ordered: 0, ordered: 0, done: 0 };
   for (const e of state.entries) {
-    if (e.topicId === topicId && counts[e.queue] !== undefined) counts[e.queue]++;
+    if (!isTombstone(e) && e.topicId === topicId && counts[e.queue] !== undefined) counts[e.queue]++;
   }
   return counts;
 }
@@ -130,7 +135,7 @@ export function topicCounts(state, topicId) {
 // `entry.yt` so channel rules, search, and export work without re-fetching.
 export function saveTab(state, tab, topicId, suggestedByRuleId = null, ytMeta = null) {
   const url = normalizeUrl(tab && tab.url);
-  if (!url || !state.topics.some((t) => t.id === topicId)) return { entry: null, moved: false };
+  if (!url || !state.topics.some((t) => !isTombstone(t) && t.id === topicId)) return { entry: null, moved: false };
   const meta = ytMeta || ytMetaFor(state, url);
 
   const existing = findEntryByUrl(state, url);
@@ -147,6 +152,9 @@ export function saveTab(state, tab, topicId, suggestedByRuleId = null, ytMeta = 
     if (meta) existing.yt = ytStamp(meta);
     return { entry: existing, moved: true };
   }
+
+  // Remove any stale tombstone for this URL if present
+  state.entries = state.entries.filter((e) => !isTombstone(e) || e.url !== url);
 
   const entry = {
     id: uid(),
@@ -167,12 +175,12 @@ export function saveTab(state, tab, topicId, suggestedByRuleId = null, ytMeta = 
 // Move between queues (and optionally topics) and/or reorder within a queue.
 // `position` is the insert index in the destination queue; null appends.
 export function moveEntry(state, entryId, { queue = null, topicId = null, position = null } = {}) {
-  const entry = state.entries.find((e) => e.id === entryId);
+  const entry = state.entries.find((e) => !isTombstone(e) && e.id === entryId);
   if (!entry) return false;
   const dstQueue = queue || entry.queue;
   if (!QUEUES.includes(dstQueue)) return false;
   const dstTopic = topicId || entry.topicId;
-  if (!state.topics.some((t) => t.id === dstTopic)) return false;
+  if (!state.topics.some((t) => !isTombstone(t) && t.id === dstTopic)) return false;
 
   const srcList = listFor(state, entry.topicId, entry.queue).filter((e) => e.id !== entryId);
   const dstList = listFor(state, dstTopic, dstQueue).filter((e) => e.id !== entryId);
@@ -190,14 +198,14 @@ export function moveEntry(state, entryId, { queue = null, topicId = null, positi
 }
 
 export function setNote(state, entryId, note) {
-  const entry = state.entries.find((e) => e.id === entryId);
+  const entry = state.entries.find((e) => !isTombstone(e) && e.id === entryId);
   if (!entry) return false;
   entry.note = String(note ?? '');
   return true;
 }
 
 export function deleteEntry(state, entryId) {
-  const entry = state.entries.find((e) => e.id === entryId);
+  const entry = state.entries.find((e) => !isTombstone(e) && e.id === entryId);
   if (!entry) return false;
   state.entries = state.entries.filter((e) => e.id !== entryId);
   reindex(listFor(state, entry.topicId, entry.queue));
@@ -228,7 +236,7 @@ export function normalizeRuleValue(type, value) {
 
 export function addRule(state, { type, value, topicId }) {
   if (!RULE_TYPES.includes(type)) return null;
-  if (!state.topics.some((t) => t.id === topicId)) return null;
+  if (!state.topics.some((t) => !isTombstone(t) && t.id === topicId)) return null;
   const norm = normalizeRuleValue(type, value);
   if (!norm) return null;
   const rule = { id: uid(), type, value: norm, topicId, enabled: true };
@@ -237,7 +245,7 @@ export function addRule(state, { type, value, topicId }) {
 }
 
 export function updateRule(state, ruleId, patch) {
-  const rule = state.rules.find((r) => r.id === ruleId);
+  const rule = state.rules.find((r) => !isTombstone(r) && r.id === ruleId);
   if (!rule) return false;
   if (patch.type !== undefined) {
     if (!RULE_TYPES.includes(patch.type)) return false;
@@ -249,7 +257,7 @@ export function updateRule(state, ruleId, patch) {
     rule.value = norm;
   }
   if (patch.topicId !== undefined) {
-    if (!state.topics.some((t) => t.id === patch.topicId)) return false;
+    if (!state.topics.some((t) => !isTombstone(t) && t.id === patch.topicId)) return false;
     rule.topicId = patch.topicId;
   }
   if (patch.enabled !== undefined) rule.enabled = !!patch.enabled;
@@ -263,7 +271,7 @@ export function deleteRule(state, ruleId) {
 // Move a rule within the list to change its matching priority (spec: first
 // enabled rule in list order wins). `position` is the insert index; null appends.
 export function moveRule(state, ruleId, position = null) {
-  const rule = state.rules.find((r) => r.id === ruleId);
+  const rule = state.rules.find((r) => !isTombstone(r) && r.id === ruleId);
   if (!rule) return false;
   const list = state.rules.filter((r) => r.id !== ruleId);
   const idx =
@@ -386,14 +394,14 @@ export function pruneYtMeta(state, cap = 500) {
 // filing, where enrichment runs once after the whole save loop).
 export function backfillYtStamps(state) {
   for (const e of state.entries) {
-    if (e.yt) continue;
+    if (isTombstone(e) || e.yt) continue;
     const meta = ytMetaFor(state, e.url);
     if (meta) e.yt = ytStamp(meta);
   }
 }
 
 export function ruleMatches(rule, url, meta = null) {
-  if (!rule || rule.enabled === false) return false;
+  if (!rule || isTombstone(rule) || rule.enabled === false) return false;
   let u;
   try {
     u = new URL(String(url));
@@ -425,7 +433,7 @@ export function ruleMatches(rule, url, meta = null) {
 // (state.ytMeta), which surfaces populate before save — see youtube.js.
 export function matchUrl(state, url) {
   const meta = ytMetaFor(state, url);
-  return state.rules.find((r) => ruleMatches(r, url, meta)) || null;
+  return state.rules.find((r) => !isTombstone(r) && ruleMatches(r, url, meta)) || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,9 +444,12 @@ export function matchUrl(state, url) {
 export function searchEntries(state, query) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [];
-  const topicName = new Map(state.topics.map((t) => [t.id, t.name.toLowerCase()]));
+  const topicName = new Map(
+    state.topics.filter((t) => !isTombstone(t)).map((t) => [t.id, t.name.toLowerCase()])
+  );
   return state.entries
     .filter((e) => {
+      if (isTombstone(e)) return false;
       const topic = topicName.get(e.topicId) || '';
       return (
         (e.note || '').toLowerCase().includes(q) ||
@@ -476,8 +487,10 @@ export function exportState(state, extras = {}) {
   }
   return JSON.parse(
     JSON.stringify({
-      ...state,
-      ytMeta: undefined,
+      schemaVersion: state.schemaVersion || 1,
+      topics: (state.topics || []).filter((t) => !isTombstone(t)),
+      entries: (state.entries || []).filter((e) => !isTombstone(e)),
+      rules: (state.rules || []).filter((r) => !isTombstone(r)),
       settings,
       keyboardShortcuts: extras.keyboardShortcuts ?? null,
       exportedAt: new Date().toISOString(),
@@ -486,7 +499,7 @@ export function exportState(state, extras = {}) {
 }
 
 function reindexAll(state) {
-  for (const topic of state.topics) {
+  for (const topic of state.topics.filter((t) => !isTombstone(t))) {
     for (const queue of QUEUES) {
       reindex(listFor(state, topic.id, queue));
     }
@@ -515,9 +528,9 @@ export function importState(current, incoming) {
   // Topics merge by name (case-insensitive); ids remapped for entries/rules.
   const topicMap = new Map();
   for (const t of incoming.topics) {
-    if (!t || !t.name) continue;
+    if (!t || !t.name || isTombstone(t)) continue;
     const name = String(t.name).trim();
-    let existing = current.topics.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    let existing = current.topics.find((x) => !isTombstone(x) && x.name.toLowerCase() === name.toLowerCase());
     if (!existing) {
       const id = t.id && !current.topics.some((x) => x.id === t.id) ? t.id : uid();
       existing = { id, name, createdAt: t.createdAt || Date.now() };
@@ -528,12 +541,13 @@ export function importState(current, incoming) {
   }
 
   for (const r of incoming.rules || []) {
+    if (isTombstone(r)) continue;
     const topicId = r && topicMap.get(r.topicId);
     if (!topicId || !RULE_TYPES.includes(r.type) || !r.value) continue;
     const norm = normalizeRuleValue(r.type, r.value);
     if (
       current.rules.some(
-        (x) => x.type === r.type && x.value === norm && x.topicId === topicId
+        (x) => !isTombstone(x) && x.type === r.type && x.value === norm && x.topicId === topicId
       )
     ) {
       continue;
