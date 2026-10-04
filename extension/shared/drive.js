@@ -155,3 +155,25 @@ export async function uploadSyncState(token, fileId, payload, { fetchImpl } = {}
     modifiedTimeMs: modifiedTimeMs || Date.now(),
   };
 }
+
+// Retrieve authenticated user info (email, displayName) from Drive API
+export async function getDriveUserInfo(token, { fetchImpl } = {}) {
+  const f = getFetch(fetchImpl);
+  const authHeader = { Authorization: `Bearer ${token}` };
+  const res = await f(`${DRIVE_API_BASE}/about?fields=user(emailAddress,displayName)`, {
+    headers: authHeader,
+  });
+
+  if (!res.ok) {
+    throw new DriveError(`Failed to fetch Drive user info: HTTP ${res.status}`, res.status);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (data?.user?.emailAddress) {
+    return {
+      email: data.user.emailAddress,
+      displayName: data.user.displayName || null,
+    };
+  }
+  return null;
+}

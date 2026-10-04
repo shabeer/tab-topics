@@ -4,11 +4,21 @@
   "short_name": "Tab Topics",
   "version": "0.2.0",
   "description": "Save tabs into topics with to_be_ordered / ordered / done queues, per-entry notes, rule-based topic suggestions, search, and JSON export/import.",
-  "permissions": ["tabs", "storage", "favicon", "identity", "alarms"],
-  "host_permissions": ["https://www.googleapis.com/*"],
+  "permissions": [
+    "tabs",
+    "storage",
+    "favicon",
+    "identity",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*"
+  ],
   "oauth2": {
     "client_id": "173240064533-36a0lobbfetbi58hrf3pde6p91f95eho.apps.googleusercontent.com",
-    "scopes": ["https://www.googleapis.com/auth/drive.appdata"]
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.appdata"
+    ]
   },
   "background": {
     "service_worker": "background/service-worker.js",
@@ -30,15 +40,21 @@
   },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Ctrl+Shift+Space" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+Space"
+      },
       "description": "Open the Tab Topics popup"
     },
     "save-tab": {
-      "suggested_key": { "default": "Alt+Shift+U" },
+      "suggested_key": {
+        "default": "Alt+Shift+U"
+      },
       "description": "Save current tab to a topic (quick picker)"
     },
     "add-note": {
-      "suggested_key": { "default": "Alt+Shift+N" },
+      "suggested_key": {
+        "default": "Alt+Shift+N"
+      },
       "description": "Add or edit the note on the current tab"
     }
   }

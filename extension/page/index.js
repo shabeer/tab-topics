@@ -5,7 +5,7 @@
 import * as logic from '../shared/logic.js';
 import { chromeAdapter, loadState, saveState } from '../shared/store.js';
 import { loadSyncMeta, saveSyncMeta, performSync } from '../shared/sync-engine.js';
-import { getExtensionAuthToken, removeCachedToken } from '../auth.js';
+import { getExtensionAuthToken, revokeToken, getExtensionUserInfo } from '../auth.js';
 
 const QUEUE_LABELS = { to_be_ordered: 'To be ordered', ordered: 'Ordered', done: 'Done' };
 
@@ -740,6 +740,10 @@ async function updateSyncStatusUI() {
   if (!els.syncStatus) return;
 
   els.syncStatus.className = 'sync-status-badge ' + (meta.status || 'idle');
+  // Remove any previously rendered account badge so it can be re-created
+  const existingBadge = document.getElementById('sync-account-badge');
+  if (existingBadge) existingBadge.remove();
+
   if (!meta.enabled) {
     els.syncStatus.textContent = 'Disabled';
     els.syncAuthBtn.textContent = 'Sign in with Google';
@@ -751,6 +755,16 @@ async function updateSyncStatusUI() {
     els.syncAuthBtn.className = '';
     els.syncNowBtn.hidden = false;
     els.syncDetails.hidden = false;
+
+    // Show the signed-in Google account email beside the Sync Now button
+    if (meta.userEmail) {
+      const badge = document.createElement('span');
+      badge.id = 'sync-account-badge';
+      badge.className = 'sync-account-badge';
+      badge.textContent = meta.userEmail;
+      badge.title = meta.userEmail;
+      els.syncNowBtn.insertAdjacentElement('afterend', badge);
+    }
 
     if (meta.status === 'syncing') {
       els.syncStatus.textContent = 'Syncing…';
@@ -834,6 +848,22 @@ async function init() {
   selectedTopicId = state.topics[0] ? state.topics[0].id : null;
   render();
 
+  // Reconcile displayed user email with the signed-in extension account if sync is enabled
+  loadSyncMeta(chromeAdapter()).then(async (meta) => {
+    if (meta.enabled) {
+      try {
+        const userInfo = await getExtensionUserInfo();
+        if (userInfo && userInfo.email && userInfo.email !== meta.userEmail) {
+          meta.userEmail = userInfo.email;
+          await saveSyncMeta(chromeAdapter(), meta);
+          await updateSyncStatusUI();
+        }
+      } catch {
+        // Silent fail
+      }
+    }
+  });
+
   els.search.addEventListener('input', () => {
     searchQuery = els.search.value;
     render();
@@ -905,7 +935,7 @@ async function init() {
           if (chrome.runtime.lastError) { /* ignore */ }
         });
       }
-    } catch {}
+    } catch { }
   });
 
   els.ytApiKey.addEventListener('change', async () => {
@@ -917,7 +947,7 @@ async function init() {
           if (chrome.runtime.lastError) { /* ignore */ }
         });
       }
-    } catch {}
+    } catch { }
   });
 
   els.exportBtn.addEventListener('click', () => {
@@ -949,7 +979,7 @@ async function init() {
       await persistAndRender();
       window.alert(
         `Imported: +${stats.topicsAdded} topic(s), +${stats.entriesAdded} entr${stats.entriesAdded === 1 ? 'y' : 'ies'}, ` +
-          `+${stats.rulesAdded} rule(s). ${stats.conflictsKeptLocal} URL conflict(s) kept local.`
+        `+${stats.rulesAdded} rule(s). ${stats.conflictsKeptLocal} URL conflict(s) kept local.`
       );
     } catch (err) {
       window.alert(`Import failed: ${err.message}`);
@@ -959,8 +989,17 @@ async function init() {
   els.syncAuthBtn.addEventListener('click', async () => {
     const meta = await loadSyncMeta(chromeAdapter());
     if (meta.enabled) {
+      // Revoke the cached OAuth token so re-sign-in will prompt Google auth
+      try {
+        const token = await getExtensionAuthToken({ interactive: false });
+        if (token) await revokeToken(token);
+      } catch {
+        // Token may already be invalid — ignore
+      }
       meta.enabled = false;
       meta.status = 'idle';
+      meta.userEmail = null;
+      meta.driveFileId = null;
       await saveSyncMeta(chromeAdapter(), meta);
       await updateSyncStatusUI();
     } else {
@@ -969,6 +1008,15 @@ async function init() {
         const token = await getExtensionAuthToken({ interactive: true });
         if (token) {
           meta.enabled = true;
+          // Fetch and persist the signed-in user's email via OAuth token (not Chrome profile)
+          try {
+            const userInfo = await getExtensionUserInfo(token);
+            if (userInfo && userInfo.email) {
+              meta.userEmail = userInfo.email;
+            }
+          } catch {
+            // Non-critical — email display is best-effort
+          }
           await saveSyncMeta(chromeAdapter(), meta);
           await updateSyncStatusUI();
           const res = await performSync({
@@ -997,6 +1045,18 @@ async function init() {
       interactive: true,
     });
     if (res.ok) {
+      try {
+        const userInfo = await getExtensionUserInfo();
+        if (userInfo && userInfo.email) {
+          const currentMeta = await loadSyncMeta(chromeAdapter());
+          if (currentMeta.userEmail !== userInfo.email) {
+            currentMeta.userEmail = userInfo.email;
+            await saveSyncMeta(chromeAdapter(), currentMeta);
+          }
+        }
+      } catch {
+        // Best-effort
+      }
       state = await loadState(chromeAdapter());
       render();
     } else {

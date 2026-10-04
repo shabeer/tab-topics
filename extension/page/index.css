@@ -229,6 +229,11 @@ dialog input, dialog select { width: 100%; font: inherit; padding: 7px 9px; bord
 .sync-status-badge.syncing { background: #e0e7ff; border-color: #a5b4fc; color: #4338ca; }
 .sync-status-badge.error { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .sync-status-badge.offline { background: #fef3c7; border-color: #fde68a; color: #b45309; }
+.sync-account-badge {
+  font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .about-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .about-section h3 { margin: 0 0 6px; font-size: 13px; }

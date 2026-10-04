@@ -310,6 +310,45 @@ describe('Google Drive REST client (drive.js)', () => {
       (err) => err instanceof drive.DriveError && err.status === 401
     );
   });
+
+  it('retrieves authenticated user info from Drive about API', async () => {
+    let capturedHeaders = null;
+    const mockFetch = async (url, opts) => {
+      if (url.includes('/drive/v3/about?fields=user(emailAddress,displayName)')) {
+        capturedHeaders = opts?.headers;
+        return {
+          ok: true,
+          json: async () => ({
+            user: {
+              emailAddress: 'signedin_user@example.com',
+              displayName: 'Signed In User',
+            },
+          }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const userInfo = await drive.getDriveUserInfo('test_oauth_token', { fetchImpl: mockFetch });
+    assert.deepEqual(userInfo, {
+      email: 'signedin_user@example.com',
+      displayName: 'Signed In User',
+    });
+    assert.equal(capturedHeaders?.Authorization, 'Bearer test_oauth_token');
+  });
+
+  it('handles errors when fetching user info from Drive about API', async () => {
+    const mockFetch = async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+    });
+
+    await assert.rejects(
+      () => drive.getDriveUserInfo('bad_token', { fetchImpl: mockFetch }),
+      (err) => err instanceof drive.DriveError && err.status === 403
+    );
+  });
 });
 
 describe('high-level sync engine (sync-engine.js)', () => {
