@@ -1,6 +1,8 @@
 // Google Identity Services (GIS) token provider for Tab Topics PWA on mobile and web.
 // Requests drive.appdata scope access and manages token expiration.
 
+import { getDriveUserInfo } from './shared/drive.js';
+
 const DEFAULT_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 let tokenClient = null;
 let currentToken = null;
@@ -106,3 +108,15 @@ export function signOutPwa() {
   }
   clearCachedPwaToken();
 }
+
+export async function getPwaUserInfo(token = null) {
+  try {
+    const authToken = token || await getPwaAuthToken({ interactive: false });
+    if (!authToken) return null;
+    return await getDriveUserInfo(authToken);
+  } catch (err) {
+    console.warn('Failed to retrieve Google user info:', err);
+    return null;
+  }
+}
+

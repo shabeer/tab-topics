@@ -192,6 +192,29 @@ body {
 .sync-status-badge.error { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .sync-status-badge.offline { background: #fef3c7; border-color: #fde68a; color: #b45309; }
 
+.sync-account-badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-key-row label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.yt-key-row input {
+  flex: 1;
+  min-width: 180px;
+}
+
 .sync-dot {
   display: inline-block;
   width: 8px;

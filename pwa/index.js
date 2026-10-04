@@ -4,7 +4,7 @@ import { loadState, saveState } from './shared/store.js';
 import { indexedDbAdapter } from './idb-adapter.js';
 import { ensureYtMeta } from './shared/youtube.js';
 import { loadSyncMeta, saveSyncMeta, performSync } from './shared/sync-engine.js';
-import { getPwaAuthToken, signOutPwa, loadGisScript } from './auth.js';
+import { getPwaAuthToken, signOutPwa, loadGisScript, getPwaUserInfo } from './auth.js';
 
 const adapter = indexedDbAdapter();
 
@@ -485,6 +485,9 @@ async function updateSyncStatusUI() {
   const meta = await loadSyncMeta(adapter);
   if (!els.syncStatus) return;
 
+  const existingBadge = document.getElementById('sync-account-badge');
+  if (existingBadge) existingBadge.remove();
+
   els.syncStatus.className = 'sync-status-badge ' + (meta.status || 'idle');
   els.syncBadge.className = 'sync-dot ' + (meta.status || 'idle');
 
@@ -499,6 +502,16 @@ async function updateSyncStatusUI() {
     els.syncAuthBtn.className = '';
     els.syncNowBtn.hidden = false;
     els.syncDetails.hidden = false;
+
+    // Show the signed-in Google account email beside the Sync Now button
+    if (meta.userEmail) {
+      const badge = document.createElement('span');
+      badge.id = 'sync-account-badge';
+      badge.className = 'sync-account-badge';
+      badge.textContent = meta.userEmail;
+      badge.title = meta.userEmail;
+      els.syncNowBtn.insertAdjacentElement('afterend', badge);
+    }
 
     if (meta.status === 'syncing') {
       els.syncStatus.textContent = 'Syncing…';
@@ -541,6 +554,22 @@ async function init() {
   state = await loadState(adapter);
   selectedTopicId = state.topics[0]?.id || null;
   render();
+
+  // Reconcile displayed user email with the signed-in Google account if sync is enabled
+  loadSyncMeta(adapter).then(async (meta) => {
+    if (meta.enabled) {
+      try {
+        const userInfo = await getPwaUserInfo();
+        if (userInfo && userInfo.email && userInfo.email !== meta.userEmail) {
+          meta.userEmail = userInfo.email;
+          await saveSyncMeta(adapter, meta);
+          await updateSyncStatusUI();
+        }
+      } catch {
+        // Silent fail
+      }
+    }
+  });
 
   // Register Service Worker
   if ('serviceWorker' in navigator) {
@@ -743,6 +772,8 @@ async function init() {
     if (meta.enabled) {
       meta.enabled = false;
       meta.status = 'idle';
+      meta.userEmail = null;
+      meta.driveFileId = null;
       signOutPwa();
       await saveSyncMeta(adapter, meta);
       await updateSyncStatusUI();
@@ -752,6 +783,14 @@ async function init() {
         const token = await getPwaAuthToken({ interactive: true });
         if (token) {
           meta.enabled = true;
+          try {
+            const userInfo = await getPwaUserInfo(token);
+            if (userInfo && userInfo.email) {
+              meta.userEmail = userInfo.email;
+            }
+          } catch {
+            // Non-critical — email display is best-effort
+          }
           await saveSyncMeta(adapter, meta);
           await updateSyncStatusUI();
           const res = await performSync({
@@ -779,6 +818,18 @@ async function init() {
       interactive: true,
     });
     if (res.ok) {
+      try {
+        const userInfo = await getPwaUserInfo();
+        if (userInfo && userInfo.email) {
+          const currentMeta = await loadSyncMeta(adapter);
+          if (currentMeta.userEmail !== userInfo.email) {
+            currentMeta.userEmail = userInfo.email;
+            await saveSyncMeta(adapter, currentMeta);
+          }
+        }
+      } catch {
+        // Best-effort
+      }
       state = await loadState(adapter);
       render();
     } else {
