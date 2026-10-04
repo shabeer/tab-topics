@@ -705,13 +705,23 @@ async function init() {
     await saveState(adapter, state);
   });
 
-  els.exportBtn.addEventListener('click', () => {
-    const data = logic.exportState(state);
+  els.exportBtn.addEventListener('click', async () => {
+    let googleAccount = null;
+    try {
+      const meta = await loadSyncMeta(adapter);
+      if (meta && meta.userEmail) {
+        googleAccount = meta.userEmail;
+      }
+    } catch {
+      // Best-effort
+    }
+    const data = logic.exportState(state, { googleAccount });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'tab-topics-export.json';
     a.click();
+    URL.revokeObjectURL(a.href);
   });
 
   els.importFile.addEventListener('change', async () => {

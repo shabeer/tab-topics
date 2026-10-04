@@ -563,12 +563,27 @@ export function maskApiKey(key) {
 // bindings are owned by Chrome and cannot be applied from a file. The Data
 // API key in settings is masked (first and last 4 characters preserved, middle
 // characters masked). The regenerable ytMeta cache is dropped; each entry's
-// stamped `yt` copy travels with the entry.
+// stamped `yt` copy travels with the entry. The signed-in Google account email
+// (if given via extras or state) is embedded for reference — importState ignores
+// it, since account authentication is managed by the active session.
 export function exportState(state, extras = {}) {
   const settings = { ...(state.settings || {}) };
   if (typeof settings.ytApiKey === 'string' && settings.ytApiKey) {
     settings.ytApiKey = maskApiKey(settings.ytApiKey);
   }
+  const rawGoogleAccount =
+    extras.googleAccount ??
+    extras.googleEmail ??
+    extras.userEmail ??
+    state.userEmail ??
+    state.googleAccount ??
+    state.googleEmail ??
+    null;
+  const googleAccount =
+    typeof rawGoogleAccount === 'object' && rawGoogleAccount !== null
+      ? (typeof rawGoogleAccount.email === 'string' ? rawGoogleAccount.email.trim() : null)
+      : (typeof rawGoogleAccount === 'string' && rawGoogleAccount.trim() ? rawGoogleAccount.trim() : null);
+
   return JSON.parse(
     JSON.stringify({
       schemaVersion: state.schemaVersion || 1,
@@ -577,6 +592,8 @@ export function exportState(state, extras = {}) {
       rules: (state.rules || []).filter((r) => !isTombstone(r)),
       settings,
       keyboardShortcuts: extras.keyboardShortcuts ?? null,
+      googleAccount,
+      googleEmail: googleAccount,
       exportedAt: new Date().toISOString(),
     })
   );
@@ -606,6 +623,9 @@ export function importState(current, incoming) {
   }
   // `incoming.keyboardShortcuts` is intentionally ignored: Chrome owns the
   // actual bindings, so the exported copy is informational only.
+  // `incoming.googleAccount` and `incoming.googleEmail` are intentionally ignored:
+  // Google account authentication is owned by the active session/OAuth token,
+  // so the exported copy is informational only.
 
   const stats = { topicsAdded: 0, entriesAdded: 0, conflictsKeptLocal: 0, rulesAdded: 0 };
 

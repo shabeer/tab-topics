@@ -950,7 +950,7 @@ async function init() {
     } catch { }
   });
 
-  els.exportBtn.addEventListener('click', () => {
+  els.exportBtn.addEventListener('click', async () => {
     // Keyboard shortcuts are read from the manifest for reference; import
     // ignores them because Chrome owns the live bindings.
     const commands = chrome.runtime.getManifest().commands || {};
@@ -959,7 +959,21 @@ async function init() {
       shortcut: cmd.suggested_key ? cmd.suggested_key.default : null,
       description: cmd.description || '',
     }));
-    const data = logic.exportState(state, { keyboardShortcuts });
+    let googleAccount = null;
+    try {
+      const meta = await loadSyncMeta(chromeAdapter());
+      if (meta && meta.userEmail) {
+        googleAccount = meta.userEmail;
+      } else if (meta && meta.enabled) {
+        const userInfo = await getExtensionUserInfo();
+        if (userInfo && userInfo.email) {
+          googleAccount = userInfo.email;
+        }
+      }
+    } catch {
+      // Best-effort
+    }
+    const data = logic.exportState(state, { keyboardShortcuts, googleAccount });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

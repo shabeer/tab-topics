@@ -412,6 +412,34 @@ test('exportState embeds keyboard shortcuts; importState ignores them', () => {
   assert.equal(JSON.stringify(s), before);
 });
 
+test('exportState embeds google email account; importState ignores it', () => {
+  const s = fresh();
+  const email = 'user@example.com';
+  const exported = logic.exportState(s, { googleAccount: email });
+  assert.equal(exported.googleAccount, email);
+  assert.equal(exported.googleEmail, email);
+  assert.equal(logic.exportState(s).googleAccount, null);
+  assert.equal(logic.exportState(s).googleEmail, null);
+
+  // Also verify passing googleEmail in extras
+  const exportedWithEmail = logic.exportState(s, { googleEmail: email });
+  assert.equal(exportedWithEmail.googleAccount, email);
+  assert.equal(exportedWithEmail.googleEmail, email);
+
+  // A file carrying a google email account imports fine and does not affect local state
+  const before = JSON.stringify(s);
+  exported.googleAccount = 'different_user@example.com';
+  exported.googleEmail = 'different_user@example.com';
+  const stats = logic.importState(s, exported);
+  assert.equal(stats.topicsAdded, 0);
+  assert.equal(stats.entriesAdded, 0);
+  assert.equal(stats.rulesAdded, 0);
+  assert.equal(JSON.stringify(s), before);
+  assert.equal(s.googleAccount, undefined);
+  assert.equal(s.googleEmail, undefined);
+  assert.equal(s.userEmail, undefined);
+});
+
 // --- store adapters ---------------------------------------------------------
 
 test('memoryAdapter loadState initializes empty storage and round-trips saves', async () => {
